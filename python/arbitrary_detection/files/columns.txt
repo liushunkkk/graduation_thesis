@@ -1,0 +1,1 @@
+['tx_hash', 'tx_type', 'block_number', 'nonce', 'gas_price', 'gas_tip_cap', 'gas_fee_cap', 'gas', 'to', 'value', 'data', 'access_list', 'v', 'r', 's', 'transaction_json', 'post_state', 'status', 'cumulative_gas_used', 'bloom', 'logs', 'contract_address', 'gas_used', 'effective_gas_price', 'blob_gas_used', 'blob_gas_price', 'block_hash', 'transaction_index', 'receipt_json']
