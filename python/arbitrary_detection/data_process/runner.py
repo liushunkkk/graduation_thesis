@@ -116,3 +116,44 @@ class DataProcessRunner:
         if os.path.exists(file_name):
             os.remove(file_name)
         df.to_csv(file_name, index=False)
+
+
+def operate_positive(limit=10000):
+    r = DataProcessRunner()
+    columns, rows = r.get_rows(r.TableEthereum, limit)
+    print(columns)
+
+    df = r.transfer_to_dataframe(columns, rows)
+    print(df)
+
+    # low, upper, df = r.filter_rows_within_data_length(df)
+    # print(low, upper)
+
+    print(df)
+
+    r.output_tx_hash(df, r.TableEthereum)
+
+    r.output_all(df, r.TableEthereum)
+
+
+def operate_negative(limit=10000):
+    r = DataProcessRunner()
+    columns, rows = r.get_rows(r.TableComparison, limit)
+    print(columns)
+
+    df = r.transfer_to_dataframe(columns, rows)
+    print(df)
+
+    # low, upper, df = r.filter_rows_within_data_length(df)
+    # print(low, upper)
+
+    print(df)
+
+    r.output_tx_hash(df, r.TableComparison)
+
+    r.output_all(df, r.TableComparison)
+
+
+if __name__ == '__main__':
+    operate_positive(10000)
+    operate_negative(10000)
