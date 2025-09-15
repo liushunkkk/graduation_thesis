@@ -47,7 +47,7 @@ class NumFeaturePreprocessor:
         """读取CSV"""
         self.df = pd.read_csv(self.input_file)
         self.features = self.df[self.cols].copy()
-        print(f"✅ 数据加载完成，共 {len(self.df)} 条记录")
+        print(f"数据加载完成，共 {len(self.df)} 条记录")
 
     def fill_missing(self):
         """缺失值处理"""
@@ -68,24 +68,24 @@ class NumFeaturePreprocessor:
 
         # 其他缺失值用中位数补
         self.features[self.num_cols] = self.features[self.num_cols].fillna(self.features[self.num_cols].median())
-        print("✅ 缺失值处理完成")
+        print("缺失值处理完成")
 
     def log_transform(self):
         """log1p 压缩"""
         for col in self.num_cols:
             self.features[col] = np.log1p(self.features[col])
-        print("✅ log1p 压缩完成")
+        print("log1p 压缩完成")
 
     def winsorize_outliers(self, limits=(0.01, 0.01)):
         """缩尾，处理极端值"""
         for col in self.num_cols:
             self.features[col] = winsorize(self.features[col], limits=limits)
-        print("✅ 缩尾处理完成")
+        print("缩尾处理完成")
 
     def standardize(self):
         """z-score 标准化"""
         self.features[self.num_cols] = self.scaler.fit_transform(self.features[self.num_cols])
-        print("✅ 标准化完成")
+        print("标准化完成")
 
     def token_to_id(self, token: str):
         h = hashlib.blake2b(token.encode("utf-8"), digest_size=8).hexdigest()
@@ -156,7 +156,7 @@ class NumFeaturePreprocessor:
     def save(self):
         """保存处理后的结果"""
         self.features.to_csv(self.output_file, index=False)
-        print(f"✅ 特征保存完成，输出文件：{self.output_file}")
+        print(f"特征保存完成，输出文件：{self.output_file}")
 
     def run(self):
         """完整流程"""
