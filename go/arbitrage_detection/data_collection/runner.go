@@ -2,6 +2,7 @@ package data_collection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"gorm.io/gorm"
@@ -9,12 +10,20 @@ import (
 	"math/rand"
 	"slices"
 	"strconv"
+	"time"
 )
 
 // RunDataCollection 收集数据，根据从研究院拿到的套利数据集进行数据的收集
 // 从链上拿到数据，存到数据库中
 func RunDataCollection() {
-	handleOne := func(id int) {
+	var handleOne func(int) error
+	handleOne = func(id int) (err error) {
+
+		defer func() {
+			if e := recover(); e != nil {
+				err = errors.New(fmt.Sprint(e))
+			}
+		}()
 		ctx := context.Background()
 		var transaction ArbitraryTransaction
 
@@ -43,11 +52,11 @@ func RunDataCollection() {
 
 		err = DB.Transaction(func(tx *gorm.DB) error {
 			tx1 := tx.Table(ethereumTransaction.TableName()).Create(ethereumTransaction)
-			if tx1.Error != nil || tx1.RowsAffected == 0 {
+			if (tx1.Error != nil || tx1.RowsAffected == 0) && !errors.Is(tx1.Error, gorm.ErrDuplicatedKey) {
 				return tx.Error
 			}
 			tx2 := tx.Table(ethereumReceipt.TableName()).Create(ethereumReceipt)
-			if tx2.Error != nil || tx2.RowsAffected == 0 {
+			if (tx2.Error != nil || tx2.RowsAffected == 0) && !errors.Is(tx2.Error, gorm.ErrDuplicatedKey) {
 				return tx.Error
 			}
 			fmt.Printf("[%d] [%s] arbitrary transaction inserted!\n", id, transaction.TxHash)
@@ -57,18 +66,25 @@ func RunDataCollection() {
 		if err != nil {
 			fmt.Printf("[%d] [%s] insert arbitrary transaction into db error: %s\n", id, transaction.TxHash, err)
 		}
+
+		return
 	}
 
-	id := 50001
+	id := 51115
 
-	for id <= 50000 {
-		handleOne(id)
+	for id <= 100000 {
+		err := handleOne(id)
+		if err != nil {
+			time.Sleep(8 * time.Second)
+			fmt.Println("sleep 8 seconds...")
+			id--
+		}
 		id++
 	}
 }
 
-// RunDataCompletion 数据补全，主要是补全EthereumTransaction表的block_number字段
-func RunDataCompletion() {
+// RunDataCompletionEthereum 数据补全，主要是补全EthereumTransaction表的block_number字段
+func RunDataCompletionEthereum() {
 	completeOne := func(id uint) {
 		var receipt EthereumReceipt
 		DB.Table(Table_EthereumReceipts).Find(&receipt, id)
@@ -83,16 +99,20 @@ func RunDataCompletion() {
 	}
 
 	id := 1
-	for id <= 50000 {
+
+	var maxId int
+	DB.Table(Table_EthereumReceipts).Select("MAX(id)").Scan(&maxId)
+	fmt.Printf("maxId=%d\n", maxId)
+	for id <= maxId {
 		completeOne(uint(id))
 		id++
 	}
 }
 
-// RunDataCompletionV2 数据补全，主要是补全ComparisonTransactions表的block_number字段
-func RunDataCompletionV2() {
+// RunDataCompletionComparison 数据补全，主要是补全ComparisonTransactions表的block_number字段
+func RunDataCompletionComparison() {
 	completeOne := func(id uint) {
-		var receipt EthereumReceipt
+		var receipt ComparisonReceipt
 		DB.Table(Table_ComparisonReceipts).Find(&receipt, id)
 		if receipt.ID == id {
 			tx := DB.Table(Table_ComparisonTransactions).Where("tx_hash = ?", receipt.TxHash).Update("block_number", receipt.BlockNumber)
@@ -104,18 +124,18 @@ func RunDataCompletionV2() {
 		}
 	}
 
-	var total int64
-	DB.Table(Table_ComparisonReceipts).Count(&total)
-
-	id := int64(1)
-	for id <= total {
+	var maxId int
+	DB.Table(Table_ComparisonReceipts).Select("MAX(id)").Scan(&maxId)
+	fmt.Printf("maxId=%d\n", maxId)
+	id := 1
+	for id <= maxId {
 		completeOne(uint(id))
 		id++
 	}
 }
 
-// RunDataCleanUp 清除无用数据
-func RunDataCleanUp() {
+// RunDataCleanUpComparison 清除对照组无用数据
+func RunDataCleanUpComparison() {
 	completeOne := func(id uint) {
 		var transaction ComparisonTransaction
 		DB.Table(Table_ComparisonTransactions).Find(&transaction, id)
@@ -134,11 +154,41 @@ func RunDataCleanUp() {
 		}
 	}
 
-	var total int64
-	DB.Table(Table_ComparisonTransactions).Count(&total)
+	var maxId int
+	DB.Table(Table_ComparisonTransactions).Select("MAX(id)").Scan(&maxId)
+	fmt.Printf("maxId=%d\n", maxId)
+	id := 1
+	for id <= maxId {
+		completeOne(uint(id))
+		id++
+	}
+}
 
-	id := int64(1)
-	for id <= total {
+// RunDataCleanUpEthereum 清除实验组无用数据
+func RunDataCleanUpEthereum() {
+	completeOne := func(id uint) {
+		var transaction EthereumTransaction
+		DB.Table(Table_EthereumTransactions).Find(&transaction, id)
+		if transaction.ID == id {
+			var exist int64
+			tx := DB.Table(Table_EthereumReceipts).Where("tx_hash = ?", transaction.TxHash).Count(&exist)
+			if tx.Error == nil && exist == 0 {
+				fmt.Printf("[%d] [%s] doesn't have receipt, need to delete!\n", id, transaction.TxHash)
+				tx1 := DB.Table(Table_EthereumTransactions).Delete(transaction)
+				if tx1.Error == nil && tx1.RowsAffected == 1 {
+					fmt.Printf("[%d] [%s] deleted!\n", id, transaction.TxHash)
+				}
+				return
+			}
+			fmt.Printf("[%d] [%s] have receipt!\n", id, transaction.TxHash)
+		}
+	}
+
+	var maxId int
+	DB.Table(Table_EthereumTransactions).Select("MAX(id)").Scan(&maxId)
+	fmt.Printf("maxId=%d\n", maxId)
+	id := 1
+	for id <= maxId {
 		completeOne(uint(id))
 		id++
 	}
@@ -190,8 +240,13 @@ func RunComparisonDatasetCollection() {
 		total := len(transactions)
 
 		need := 1
+		tryCount := 0
 		selected := make(map[int]bool)
 		for need <= 2*len(currTxs) {
+			tryCount++
+			if tryCount > 8*len(currTxs) { // 防止一些条数不够，死循环的情况，直接弹出。
+				break
+			}
 			random := rand.Intn(total)
 			target := transactions[random]
 			exist := slices.ContainsFunc(currTxs, func(transaction *EthereumTransaction) bool {
@@ -204,12 +259,19 @@ func RunComparisonDatasetCollection() {
 
 			if err != nil {
 				fmt.Printf("[%d] [%s] TransactionByHash error: %s\n", need, target.Hash().Hex(), err)
+				time.Sleep(3 * time.Second)
+				continue
+			}
+
+			// len(data) == 0 的先不要，如果已经执行很多次，都拿不到其他的了，那就还是拿一下
+			if tryCount < 6*len(currTxs) && (len(string(tx.Data())) == 0 || string(tx.Data()) == "0x") {
 				continue
 			}
 
 			receipt, err := EthClient.TransactionReceipt(ctx, target.Hash())
 			if err != nil {
 				fmt.Printf("[%d] [%s] TransactionReceipt error: %s\n", need, target.Hash().Hex(), err)
+				time.Sleep(3 * time.Second)
 				continue
 			}
 
@@ -257,7 +319,7 @@ func RunComparisonDatasetCollection() {
 		return nil
 	}
 
-	curr := 47536417
+	curr := 47523888
 
 	// 遍历所有的block_number
 	for i := 0; i < len(blockNumbers); i++ {
@@ -267,7 +329,120 @@ func RunComparisonDatasetCollection() {
 		}
 		if err := collectOne(bn); err != nil {
 			fmt.Printf("[%d/%d] [%d] collect fail, err: %s\n", i, len(blockNumbers), bn, err)
+			time.Sleep(8 * time.Second)
+			fmt.Printf("sleep 8 second...")
 			i--
+		}
+	}
+}
+
+// RunDataFillEthereum 补充数据，有些transaction没有receipt，重新补充一下
+func RunDataFillEthereum() {
+	var handleOne func(string) error
+	handleOne = func(th string) (err error) {
+
+		defer func() {
+			if e := recover(); e != nil {
+				err = errors.New(fmt.Sprint(e))
+			}
+		}()
+		ctx := context.Background()
+		txHash := common.HexToHash(th)
+
+		receipt, err := EthClient.TransactionReceipt(ctx, txHash)
+		if err != nil {
+			fmt.Printf("[%s] TransactionReceipt error: %s\n", th, err)
+		}
+
+		ethereumReceipt, err := ConvertToEthereumReceipt(receipt)
+		if err != nil {
+			fmt.Printf("[%s] ConvertToEthereumReceipt error: %s\n", th, err)
+		}
+
+		err = DB.Transaction(func(tx *gorm.DB) error {
+			tx2 := tx.Table(ethereumReceipt.TableName()).Create(ethereumReceipt)
+			if (tx2.Error != nil || tx2.RowsAffected == 0) && !errors.Is(tx2.Error, gorm.ErrDuplicatedKey) {
+				return tx.Error
+			}
+			fmt.Printf("[%s] arbitrary transaction inserted!\n", th)
+			return nil
+		})
+
+		if err != nil {
+			fmt.Printf("[%s] insert arbitrary transaction into db error: %s\n", th, err)
+		}
+
+		return
+	}
+
+	var txHashes []string
+	DB.Table(Table_EthereumTransactions).Select("tx_hash").Scan(&txHashes)
+	for id, txHash := range txHashes {
+		fmt.Printf("[%d] %s\n", id, txHash)
+		var receipt EthereumReceipt
+
+		DB.Table(Table_EthereumReceipts).Where("tx_hash", txHash).Find(&receipt)
+		if receipt.ID == 0 {
+			fmt.Printf("[%d] %s has no receipts\n", id, txHash)
+			err := handleOne(txHash)
+			if err != nil {
+				fmt.Println("fill failed...")
+			}
+		}
+	}
+}
+
+// RunDataFillComparison 补充数据，有些transaction没有receipt，重新补充一下
+func RunDataFillComparison() {
+	var handleOne func(string) error
+	handleOne = func(th string) (err error) {
+
+		defer func() {
+			if e := recover(); e != nil {
+				err = errors.New(fmt.Sprint(e))
+			}
+		}()
+		ctx := context.Background()
+		txHash := common.HexToHash(th)
+
+		receipt, err := EthClient.TransactionReceipt(ctx, txHash)
+		if err != nil {
+			fmt.Printf("[%s] TransactionReceipt error: %s\n", th, err)
+		}
+
+		comparisonReceipt, err := ConvertToComparisonReceipt(receipt)
+		if err != nil {
+			fmt.Printf("[%s] ConvertToEthereumReceipt error: %s\n", th, err)
+		}
+
+		err = DB.Transaction(func(tx *gorm.DB) error {
+			tx2 := tx.Table(comparisonReceipt.TableName()).Create(comparisonReceipt)
+			if (tx2.Error != nil || tx2.RowsAffected == 0) && !errors.Is(tx2.Error, gorm.ErrDuplicatedKey) {
+				return tx.Error
+			}
+			fmt.Printf("[%s] arbitrary transaction inserted!\n", th)
+			return nil
+		})
+
+		if err != nil {
+			fmt.Printf("[%s] insert arbitrary transaction into db error: %s\n", th, err)
+		}
+
+		return
+	}
+
+	var txHashes []string
+	DB.Table(Table_ComparisonTransactions).Select("tx_hash").Scan(&txHashes)
+	for _, txHash := range txHashes {
+		var receipt ComparisonReceipt
+
+		DB.Table(Table_ComparisonReceipts).Where("tx_hash", txHash).Find(&receipt)
+		if receipt.ID == 0 {
+			fmt.Printf("%s has no receipts\n", txHash)
+			err := handleOne(txHash)
+			if err != nil {
+				fmt.Println("fill failed...")
+			}
 		}
 	}
 }
