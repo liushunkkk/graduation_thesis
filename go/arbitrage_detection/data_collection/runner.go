@@ -319,12 +319,12 @@ func RunComparisonDatasetCollection() {
 		return nil
 	}
 
-	curr := 47523888
+	curr := 47541183
 
 	// 遍历所有的block_number
 	for i := 0; i < len(blockNumbers); i++ {
 		bn := blockNumbers[i]
-		if bn < curr {
+		if bn != curr {
 			continue
 		}
 		if err := collectOne(bn); err != nil {
@@ -445,4 +445,29 @@ func RunDataFillComparison() {
 			}
 		}
 	}
+}
+
+// RunComparisonDatasetLess 主要用于比对数据是否对得上
+func RunComparisonDatasetLess() {
+	// 获取数据库中该区块交易个数
+	var results1 []BlockTxCount
+	DB.Table(Table_EthereumTransactions).
+		Select("block_number, COUNT(id) as tx_count").
+		Group("block_number").
+		Order("block_number").
+		Scan(&results1)
+
+	var results2 []BlockTxCount
+	DB.Table(Table_ComparisonTransactions).
+		Select("block_number, COUNT(id) as tx_count").
+		Group("block_number").
+		Order("block_number").
+		Scan(&results2)
+
+	for bn, n := range results1 {
+		if 2*n.TxCount != results2[bn].TxCount {
+			fmt.Printf("len(txs1) != len(txs2), %d %d %d", n.BlockNumber, n.TxCount, results2[bn].TxCount)
+		}
+	}
+
 }
