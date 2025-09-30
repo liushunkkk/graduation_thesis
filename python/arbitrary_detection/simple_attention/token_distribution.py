@@ -73,7 +73,7 @@ class TokenDistributionAnalyzer:
         plt.show()
 
     # ------------------- 分析入口 -------------------
-    def analyze(self, vocab_sizes=[10000, 20000, 30000]):
+    def analyze(self, vocab_sizes=[20000, 40000, 60000, 80000, 100000]):
         for col, tokenizer in [(self.data_col, self.tokenize_data), (self.logs_col, self.tokenize_logs)]:
             # 原始分布
             raw_counts = self.get_token_counts(col, tokenizer)

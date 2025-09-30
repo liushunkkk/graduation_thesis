@@ -155,5 +155,5 @@ def operate_negative(limit=10000):
 
 
 if __name__ == '__main__':
-    operate_positive(10000)
-    operate_negative(10000)
+    operate_positive(100000)
+    operate_negative(200000)

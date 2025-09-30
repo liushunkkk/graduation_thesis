@@ -31,6 +31,8 @@ class NumFeaturePreprocessor:
         ]
 
         self.cols = [
+            "tx_hash",
+            "block_number",
             "gas_price",
             "gas_tip_cap",
             "gas_fee_cap",
@@ -48,6 +50,16 @@ class NumFeaturePreprocessor:
         self.df = pd.read_csv(self.input_file)
         self.features = self.df[self.cols].copy()
         print(f"数据加载完成，共 {len(self.df)} 条记录")
+
+    def keep_half_data(self):
+        df = self.df
+        # 按 block_number 分组，每组随机采样一半
+        df_sampled = df.groupby("block_number", group_keys=False).apply(
+            lambda x: x.sample(frac=0.5, random_state=42)  # frac=0.5 表示保留一半
+        )
+        # 如果只需要特定的列
+        self.features = df_sampled[self.cols].copy()
+        print(f"数据采样完成，共 {len(self.df)} 条记录，采样后 {len(self.features)} 条")
 
     def fill_missing(self):
         """缺失值处理"""
@@ -158,9 +170,12 @@ class NumFeaturePreprocessor:
         self.features.to_csv(self.output_file, index=False)
         print(f"特征保存完成，输出文件：{self.output_file}")
 
-    def run(self):
+    def run(self, keep_half=False):
         """完整流程"""
         self.load_data()
+
+        if keep_half:
+            self.keep_half_data()
 
         # 处理数值特征
         self.fill_missing()
@@ -194,10 +209,11 @@ if __name__ == "__main__":
     print(output.columns)
     print(output[:1])
 
+    # 负样本先和正样本保持数量1:1
     input_file = "../files/negative_data.csv"
     output_file = "./datasets/negative_data.csv"
     processor = NumFeaturePreprocessor(input_file, output_file)
-    processor.run()
+    processor.run(keep_half=True)
 
     output = pd.read_csv(output_file)
     print(output.columns)
