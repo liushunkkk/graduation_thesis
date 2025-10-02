@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"gorm.io/gorm"
 	"math/big"
 	"math/rand"
@@ -470,4 +471,114 @@ func RunComparisonDatasetLess() {
 		}
 	}
 
+}
+
+// RunDataFillFromAddressEthereum 补充from信息
+func RunDataFillFromAddressEthereum() {
+	var handleOne func(int64) error
+	handleOne = func(id int64) (err error) {
+
+		defer func() {
+			if e := recover(); e != nil {
+				err = errors.New(fmt.Sprint(e))
+			}
+		}()
+
+		var transaction EthereumTransaction
+		DB.First(&transaction, id)
+		if transaction.ID == 0 {
+			fmt.Printf("[%d] has no transaction\n", id)
+			return nil
+		}
+
+		newTx := &types.Transaction{}
+		err = newTx.UnmarshalJSON([]byte(transaction.OriginJsonString))
+		if err != nil {
+			return err
+		}
+
+		sender, err := types.Sender(types.LatestSignerForChainID(big.NewInt(56)), newTx)
+		if err != nil {
+			return err
+		}
+
+		transaction.FromAddress = sender.Hex()
+
+		fmt.Printf("[%d] => sender: %s\n", transaction.ID, transaction.FromAddress)
+
+		tx := DB.Table(Table_EthereumTransactions).Where("id = ?", transaction.ID).UpdateColumn("from_address", transaction.FromAddress)
+
+		if tx.Error != nil {
+			fmt.Printf("[%d] update failed\n", id)
+			return errors.New(tx.Error.Error())
+		}
+
+		return
+	}
+
+	var maxId int64
+	DB.Table(Table_EthereumTransactions).Select("MAX(id)").Scan(&maxId)
+	id := int64(1)
+	for id <= maxId {
+		err := handleOne(id)
+		if err != nil {
+			fmt.Printf("[%d] %s\n", id, err)
+		}
+		id++
+	}
+}
+
+// RunDataFillFromAddressComparison 补充from信息
+func RunDataFillFromAddressComparison() {
+	var handleOne func(int64) error
+	handleOne = func(id int64) (err error) {
+
+		defer func() {
+			if e := recover(); e != nil {
+				err = errors.New(fmt.Sprint(e))
+			}
+		}()
+
+		var transaction ComparisonTransaction
+		DB.First(&transaction, id)
+		if transaction.ID == 0 {
+			fmt.Printf("[%d] has no transaction\n", id)
+			return nil
+		}
+
+		newTx := &types.Transaction{}
+		err = newTx.UnmarshalJSON([]byte(transaction.OriginJsonString))
+		if err != nil {
+			return err
+		}
+
+		sender, err := types.Sender(types.LatestSignerForChainID(big.NewInt(56)), newTx)
+		if err != nil {
+			return err
+		}
+
+		transaction.FromAddress = sender.Hex()
+
+		fmt.Printf("[%d] => sender: %s\n", transaction.ID, transaction.FromAddress)
+
+		tx := DB.Table(Table_ComparisonTransactions).Where("id = ?", transaction.ID).UpdateColumn("from_address", transaction.FromAddress)
+
+		if tx.Error != nil {
+			fmt.Printf("[%d] update failed\n", id)
+			return errors.New(tx.Error.Error())
+		}
+
+		return
+	}
+
+	var maxId int64
+	DB.Table(Table_ComparisonTransactions).Select("MAX(id)").Scan(&maxId)
+	id := int64(1)
+	for id <= maxId {
+		err := handleOne(id)
+		if err != nil {
+			fmt.Printf("[%d] %s\n", id, err)
+		}
+		id++
+	}
 }

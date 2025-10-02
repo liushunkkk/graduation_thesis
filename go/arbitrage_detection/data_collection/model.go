@@ -42,10 +42,11 @@ type EthereumTransaction struct {
 	Gas       uint64 `gorm:"not null"`
 
 	// Transaction details
-	To         string `gorm:"type:char(128);default:null"` // nil 表示创建合约
-	Value      string `gorm:"type:varchar(128);default:null"`
-	Data       string `gorm:"type:longtext"` // 十六进制字符串表示 input data
-	AccessList string `gorm:"type:longtext"` // JSON 字符串形式
+	FromAddress string `gorm:"column:from_address;type:char(42);default:null"`
+	To          string `gorm:"type:char(128);default:null"` // nil 表示创建合约
+	Value       string `gorm:"type:varchar(128);default:null"`
+	Data        string `gorm:"type:longtext"` // 十六进制字符串表示 input data
+	AccessList  string `gorm:"type:longtext"` // JSON 字符串形式
 
 	// 签名字段
 	V string `gorm:"type:varchar(128)"`
@@ -115,10 +116,11 @@ type ComparisonTransaction struct {
 	Gas       uint64 `gorm:"not null"`
 
 	// Transaction details
-	To         string `gorm:"type:char(128);default:null"` // nil 表示创建合约
-	Value      string `gorm:"type:varchar(128);default:null"`
-	Data       string `gorm:"type:longtext"` // 十六进制字符串表示 input data
-	AccessList string `gorm:"type:longtext"` // JSON 字符串形式
+	FromAddress string `gorm:"column:from_address;type:char(42);default:null"`
+	To          string `gorm:"type:char(128);default:null"` // nil 表示创建合约
+	Value       string `gorm:"type:varchar(128);default:null"`
+	Data        string `gorm:"type:longtext"` // 十六进制字符串表示 input data
+	AccessList  string `gorm:"type:longtext"` // JSON 字符串形式
 
 	// 签名字段
 	V string `gorm:"type:varchar(128)"`

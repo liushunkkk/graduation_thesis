@@ -8,5 +8,7 @@ func main() {
 	//data_collection.RunDataCleanUp()
 	//data_collection.RunDataCompletionEthereum()
 	//data_collection.RunDataFillEthereum()
-	data_collection.RunComparisonDatasetLess()
+	//data_collection.RunComparisonDatasetLess()
+	//data_collection.RunDataFillFromAddressEthereum()
+	data_collection.RunDataFillFromAddressComparison()
 }
