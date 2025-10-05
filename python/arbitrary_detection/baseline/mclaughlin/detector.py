@@ -5,7 +5,7 @@ import networkx as nx
 TRANSFER_SIG = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 
-class ArbitrageDetector:
+class TransferArbitrageDetector:
     """
     基于 A Large-Scale Study of the Ethereum Arbitrage Ecosystem 的原子套利识别方法
     只处理 ERC-20 Transfer 事件

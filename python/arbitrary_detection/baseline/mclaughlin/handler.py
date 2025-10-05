@@ -1,8 +1,7 @@
 import pandas as pd
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
-class CSVHandler:
+class MclaughlinHandler:
     """
     处理套利/非套利 CSV 文件交易数据，调用 ArbitrageDetector 分析，并计算指标
     """
@@ -61,6 +60,9 @@ class CSVHandler:
         y_true = df_eval[true_col].astype(int)
         y_pred = df_eval[pred_col].astype(int)
 
+        pos = (y_true == 1).sum()
+        neg = (y_true == 0).sum()
+
         TP = ((y_true == 1) & (y_pred == 1)).sum()
         FP = ((y_true == 0) & (y_pred == 1)).sum()
         TN = ((y_true == 0) & (y_pred == 0)).sum()
@@ -75,7 +77,7 @@ class CSVHandler:
         recall = TP / (TP + FN) if (TP + FN) > 0 else 0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
-        print(f"Total samples: {total}")
+        print(f"Total samples: {total}, pos: {pos}, neg: {neg}")
         print(f"Correct predictions: {correct}, Wrong predictions: {wrong}")
         print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
         print(f"Accuracy: {accuracy:.3f}")

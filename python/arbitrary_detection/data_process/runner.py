@@ -34,6 +34,7 @@ common_sql = """
       t.r,
       t.s,
       t.origin_json_string AS transaction_json,
+      t.from_address AS 'from',
 
       -- ethereum_receipts 独有字段
       r.post_state,
