@@ -2,6 +2,7 @@ package data_collection
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
@@ -11,6 +12,7 @@ import (
 	"math/rand"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -227,6 +229,36 @@ func RunComparisonDatasetCollection() {
 		}
 		fmt.Printf("[%d] get tx count: %d\n", bn, len(currTxs))
 
+		// 判断当前的对比交易数
+		var currComparisonTxs []*ComparisonTransaction
+		tx1 := DB.Table(Table_ComparisonTransactions).Where("block_number", bn).Find(&currComparisonTxs)
+		if tx1.Error != nil {
+			return fmt.Errorf("get tx count in database fail, err: %s", tx1.Error.Error())
+		}
+		fmt.Printf("[%d] get currComparisonTxs count: %d\n", bn, len(currComparisonTxs))
+		deleted := 0
+		for _, compa := range currComparisonTxs {
+			var cc *ComparisonReceipt
+			tx2 := DB.Table(Table_ComparisonReceipts).Where("tx_hash", compa.TxHash).Find(&cc)
+			if tx2.Error != nil {
+				return fmt.Errorf("get tx count in database fail, err: %s", tx2.Error.Error())
+			}
+			if cc != nil && cc.TxHash != "" {
+				flag := strings.Contains(strings.ToLower(cc.Logs), "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+				if !flag {
+					tx2 := DB.Table(Table_ComparisonReceipts).Where("tx_hash = ?", compa.TxHash).Delete(nil)
+					if tx2.Error != nil {
+						return fmt.Errorf("delete no logs ComparisonReceipt, err: %s", tx2.Error.Error())
+					}
+					tx2 = DB.Table(Table_ComparisonTransactions).Where("tx_hash = ?", compa.TxHash).Delete(nil)
+					if tx2.Error != nil {
+						return fmt.Errorf("delete no logs ComparisonTransaction, err: %s", tx2.Error.Error())
+					}
+					deleted++
+				}
+			}
+		}
+
 		blockNumber := big.NewInt(int64(bn))
 		// 拿到block
 		block, err := EthClient.BlockByNumber(ctx, blockNumber)
@@ -240,12 +272,12 @@ func RunComparisonDatasetCollection() {
 		transactions := block.Transactions()
 		total := len(transactions)
 
-		need := 1
+		need := len(currComparisonTxs) - deleted + 1
 		tryCount := 0
 		selected := make(map[int]bool)
 		for need <= 2*len(currTxs) {
 			tryCount++
-			if tryCount > 8*len(currTxs) { // 防止一些条数不够，死循环的情况，直接弹出。
+			if tryCount > 12*len(currTxs) { // 防止一些条数不够，死循环的情况，直接弹出。
 				break
 			}
 			random := rand.Intn(total)
@@ -265,7 +297,7 @@ func RunComparisonDatasetCollection() {
 			}
 
 			// len(data) == 0 的先不要，如果已经执行很多次，都拿不到其他的了，那就还是拿一下
-			if tryCount < 6*len(currTxs) && (len(string(tx.Data())) == 0 || string(tx.Data()) == "0x") {
+			if tryCount < 10*len(currTxs) && (len(string(tx.Data())) == 0 || string(tx.Data()) == "0x") {
 				continue
 			}
 
@@ -273,6 +305,11 @@ func RunComparisonDatasetCollection() {
 			if err != nil {
 				fmt.Printf("[%d] [%s] TransactionReceipt error: %s\n", need, target.Hash().Hex(), err)
 				time.Sleep(3 * time.Second)
+				continue
+			}
+
+			logStr, _ := json.Marshal(receipt.Logs)
+			if !strings.Contains(strings.ToLower(string(logStr)), "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") {
 				continue
 			}
 
@@ -320,12 +357,12 @@ func RunComparisonDatasetCollection() {
 		return nil
 	}
 
-	curr := 47541183
+	curr := 0
 
 	// 遍历所有的block_number
 	for i := 0; i < len(blockNumbers); i++ {
 		bn := blockNumbers[i]
-		if bn != curr {
+		if bn <= curr {
 			continue
 		}
 		if err := collectOne(bn); err != nil {
