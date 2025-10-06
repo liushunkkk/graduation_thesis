@@ -1,0 +1,169 @@
+image: wwzzll/golang-golangci-allure:latest
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "feat/rpc"'
+      when: always
+
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "feat/rpc"'
+      when: never
+    - when: never
+
+variables:
+  REMOTE_SERVER: "34.226.211.254" # 远程服务器 IP 地址
+  GOMODCACHE: "/builds/shengweifeng/pkg/mod"  # 设定 GOMODCACHE 目录
+
+stages:
+  - merge_code
+#  - static_check
+  - unittest
+  - build_and_deploy
+  - self_test
+  - system_test
+  - clean_and_reset
+
+# ssh 相关配置
+before_script:
+  - eval `ssh-agent -s`
+  - echo "添加 SSH 密钥到 agent..."
+  - ssh-add <(echo "$SSH_KEY")
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+  - ssh-keyscan $REMOTE_SERVER > ~/.ssh/known_hosts
+  - chmod 644 ~/.ssh/known_hosts
+  # 配置 Git 认证
+  - git config --global credential.helper store
+  - echo "https://$GITLAB_USERNAME:$GITLAB_TOKEN@gitlab.com" > ~/.git-credentials
+  # 配置Git提交者身份
+  - git config --global user.email "1354393248@qq.com"
+  - git config --global user.name "wzl"
+  - go env -w GOMODCACHE=$GOMODCACHE  # 确保 Go 识别新的 GOMODCACHE 目录
+
+merge_code:
+  stage: merge_code
+  tags:
+    - bsc-rpc-docker
+  script:
+    - chmod +x cicd_shell/merge_code.sh
+    - cicd_shell/merge_code.sh
+
+#static_check:
+#  stage: static_check
+#  tags:
+#    - bsc-rpc-docker
+#  script:
+#    - chmod +x cicd_shell/static_check.sh
+#    - cicd_shell/static_check.sh
+#    - mv -f ../clone_project/bsc-rpc/code-lint-report.xml .
+#  artifacts:
+#    when: on_success
+#    paths:
+#      - code-lint-report.xml
+#    reports:
+#      junit: code-lint-report.xml
+#    expire_in: 1 week
+#  allow_failure: true
+
+unittest:
+  stage: unittest
+  tags:
+    - bsc-rpc-docker
+  script:
+    - chmod +x cicd_shell/unittest.sh
+    - cicd_shell/unittest.sh
+    - mv -f ../clone_project/bsc-rpc/unit-report.xml . || exit 1
+  artifacts:
+    when: on_success
+    paths:
+      - unit-report.xml
+    reports:
+      junit: unit-report.xml
+    expire_in: 1 week
+  allow_failure: false
+
+build_and_deploy:
+  stage: build_and_deploy
+  tags:
+    - bsc-rpc-docker
+  script:
+    - chmod +x cicd_shell/build_and_deploy.sh
+    - cicd_shell/build_and_deploy.sh
+  after_script:
+    - pwd
+    - echo $CI_JOB_STATUS
+    - touch job_failed.txt
+    - 'if [[ "$CI_JOB_STATUS" == "failed" ]]; then echo "Job failed, setting JOB_FAILED=true"; echo "true" > job_failed.txt; fi'
+    - cat job_failed.txt
+  artifacts:
+    when: always
+    paths:
+      - job_failed.txt
+  allow_failure: true
+
+self_test:
+  stage: self_test
+  tags:
+    - bsc-rpc-docker
+  script:
+    - |
+      if [ "$(cat job_failed.txt)" == "true" ]; then
+        echo "remote_deploy failed, no need to run self_test"
+      else
+        chmod +x cicd_shell/self_test.sh
+        cicd_shell/self_test.sh
+      fi
+  after_script:
+    - 'if [[ "$CI_JOB_STATUS" == "failed" ]]; then echo "Job failed, setting JOB_FAILED=true"; echo "true" > job_failed.txt; fi'
+  artifacts:
+    when: always
+    paths:
+      - api_health_check.xml
+      - job_failed.txt
+    reports:
+      junit: api_health_check.xml
+    expire_in: 1 week
+  allow_failure: true
+
+system_test:
+  stage: system_test
+  tags:
+    - bsc-rpc-docker
+  script:
+    - |
+      if [ "$(cat job_failed.txt)" == "true" ]; then
+        echo "self_test failed, no need to run system_test"
+      else
+        chmod +x cicd_shell/system_test.sh
+        cicd_shell/system_test.sh
+      fi
+  after_script:
+    - chmod +x cicd_shell/system_test_allure.sh
+    - cicd_shell/system_test_allure.sh
+    - mv -f ../blockrazor_system_test/scutum_test/testreport/ ./system_test_allure_report || exit 1
+    - mv -f ../blockrazor_system_test/scutum_test/log/ ./system_test_log || exit 1
+    - 'if [[ "$CI_JOB_STATUS" == "failed" ]]; then echo "Job failed, setting JOB_FAILED=true"; echo "true" > job_failed.txt; fi'
+  artifacts:
+    when: always
+    paths:
+      - system_test_allure_report
+      - system_test_log
+      - job_failed.txt
+    expire_in: 1 week
+  allow_failure: true
+
+clean_and_reset:
+  stage: clean_and_reset
+  tags:
+    - bsc-rpc-docker
+  script:
+    - |
+      if [ "$(cat job_failed.txt)" == "true" ]; then
+        echo "Previous job failed, performing cleanup..."
+        chmod +x cicd_shell/clean_and_reset.sh
+        cicd_shell/clean_and_reset.sh
+      else
+        echo "All job passed, no cleanup needed"
+      fi
+  needs:
+    - job: build_and_deploy
+    - job: self_test
+    - job: system_test
