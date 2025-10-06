@@ -261,4 +261,4 @@ if __name__ == "__main__":
     TARGET = "all_data"  # half_data or all_data
     pos_csv = f"../{TARGET}/datasets/positive_data.csv"
     neg_csv = f"../{TARGET}/datasets/negative_data.csv"
-    model = train_model(pos_csv, neg_csv, use_features=["num"], epochs=15)
+    model = train_model(pos_csv, neg_csv, use_features=["logs", "data", "num"], epochs=20)

@@ -8,33 +8,34 @@ from baseline.arbinet.model import ArbiNetGNN
 from baseline.arbinet.trainer import ArbiNetTrainer
 
 if __name__ == '__main__':
+    TARGET = "all_data"
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Using device:', device)
 
     # ================= 1. 构建训练图 =================
     print("load train...")
-    if os.path.exists("train_graphs.pt"):
-        train_graphs = torch.load("train_graphs.pt", weights_only=False)  # 加载回来
+    if os.path.exists("train_graphs1.pt"):
+        train_graphs = torch.load("train_graphs1.pt", weights_only=False)  # 加载回来
         print("load from train_graphs.pt")
     else:
-        train_df = pd.read_csv("../../hash_embedding/datasets/train.csv")
+        train_df = pd.read_csv(f"../../{TARGET}/datasets/train.csv")
         builder_train = ArbiNetTransactionBuilder(train_df)
         train_graphs = builder_train.build_graphs()
-        torch.save(train_graphs, "train_graphs.pt")  # 保存整个列表
+        torch.save(train_graphs, "train_graphs1.pt")  # 保存整个列表
         print("load from train.csv and build")
-    print("total train graph: ", len(train_graphs))
 
     # ================= 2. 构建测试图 =================
     print("load test...")
-    if os.path.exists("test_graphs.pt"):
-        test_graphs = torch.load("test_graphs.pt", weights_only=False)  # 加载回来
+    if os.path.exists("test_graphs1.pt"):
+        test_graphs = torch.load("test_graphs1.pt", weights_only=False)  # 加载回来
         print("load from test_graphs.pt")
     else:
-        test_df = pd.read_csv("../../hash_embedding/datasets/test.csv")
+        test_df = pd.read_csv(f"../../{TARGET}/datasets/test.csv")
         builder_test = ArbiNetTransactionBuilder(test_df)
         test_graphs = builder_test.build_graphs()
-        torch.save(test_graphs, "test_graphs.pt")  # 保存整个列表
+        torch.save(test_graphs, "test_graphs1.pt")  # 保存整个列表
         print("load from test.csv and build")
+    print("total train graph: ", len(train_graphs))
     print("total test graph: ", len(test_graphs))
 
     # ================= 3. 初始化模型 =================
@@ -47,7 +48,7 @@ if __name__ == '__main__':
 
     # ================= 5. 训练 =================
     print("training...")
-    trainer.train(epochs=50, log_interval=1)
+    trainer.train(epochs=20, log_interval=1)
 
     # ================= 6. 测试 =================
     print("testing...")

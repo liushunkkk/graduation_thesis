@@ -63,11 +63,24 @@ for block_number, arbi_txs in tqdm(arbi_by_block.items(), desc="Collecting negat
             continue
 
         sample_size = min(2 * n, len(valid_txs))
-        selected_txs = random.sample(valid_txs, sample_size)
+        curr = 1
+        selected = set()
+        try_times = 0
 
-        for tx in selected_txs:
+        while curr <= sample_size:
+            try_times += 1
+            if try_times >= 12 * sample_size:
+                break
             try:
+                idx = random.randint(0, len(valid_txs) - 1)
+                if idx in selected:
+                    continue
+                tx = valid_txs[idx]
                 receipt = w3.eth.get_transaction_receipt(tx.hash)
+                if "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" not in to_json(
+                        receipt.logs).lower():
+                    print("no transfer receipt")
+                    continue
                 row = {
                     "tx_hash": "0x" + tx.hash.hex(),
                     "block_number": tx.blockNumber,
@@ -83,6 +96,8 @@ for block_number, arbi_txs in tqdm(arbi_by_block.items(), desc="Collecting negat
                     "transaction_index": receipt.transactionIndex,
                 }
                 neg_data.append(row)
+                selected.add(idx)
+                curr += 1
             except Exception as e:
                 print(f"获取交易 {tx.hash.hex()} 失败: {e}")
 

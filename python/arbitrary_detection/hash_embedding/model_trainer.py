@@ -16,7 +16,8 @@ class TxDataset(Dataset):
         # [gas_price,gas_tip_cap,gas_fee_cap,gas,value,gas_used,effective_gas_price,transaction_index,data_len,logs_len,transfer_len]
         selected_idx = [3, 5, 8, 9]
         # 原始 num_feature 是字符串形式，需要先 eval，再筛选
-        self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
+        self.num_features = df[["gas", "gas_used"]].values.tolist()
+        # self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
         # self.num_features = df['num_feature'].apply(eval).tolist()
         self.data_features = df['data_feature'].apply(eval).tolist()
         self.logs_features = df['logs_feature'].apply(eval).tolist()
@@ -35,7 +36,7 @@ class TxDataset(Dataset):
 
 # ====== Encoder ======
 class TxEncoder(nn.Module):
-    def __init__(self, num_dim=8, data_vocab_size=60000, logs_vocab_size=80000,
+    def __init__(self, num_dim=8, data_vocab_size=20000, logs_vocab_size=20000,
                  emb_dim=128, use_features=None):
         super().__init__()
         if use_features is None:
@@ -164,7 +165,7 @@ def plot_metrics(train_metrics, val_metrics, metric_name):
 
 
 # ====== 训练函数 ======
-def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=60000, logs_vocab_size=80000,
+def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=20000, logs_vocab_size=20000,
                 batch_size=512, epochs=5, lr=1e-3, test_ratio=0.2):
     if use_features is None:
         use_features = ["num", "data", "logs"]
