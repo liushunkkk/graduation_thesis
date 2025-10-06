@@ -219,12 +219,7 @@ func (bundle *Bundle) GenBuilderReq(header *Header) (*define.Param, *txv2.Bundle
 		}
 		bsr.TxsData = append(bsr.TxsData, t)
 
-		builderPercent := 0
-		if percent, ok := BuilderPercentMap[bundle.Parent.RPCID]; ok {
-			builderPercent = percent
-		} else {
-			builderPercent = RpcBuilderProfitPercent
-		}
+		builderPercent := RpcBuilderProfitPercent
 		for _, bgTx := range bundle.Txs {
 			t := &txv2.TxsData{
 				TxHash:         bgTx.Hash().Hex(),
@@ -249,12 +244,7 @@ func (bundle *Bundle) GenBuilderReq(header *Header) (*define.Param, *txv2.Bundle
 		}
 		bsr.TxsData = append(bsr.TxsData, t)
 
-		builderPercent := 0
-		if percent, ok := BuilderPercentMap[bundle.Parent.Parent.RPCID]; ok {
-			builderPercent = percent
-		} else {
-			builderPercent = RpcBuilderProfitPercent
-		}
+		builderPercent := RpcBuilderProfitPercent
 
 		for _, bgTx := range bundle.Parent.Txs {
 			t := &txv2.TxsData{
@@ -270,13 +260,6 @@ func (bundle *Bundle) GenBuilderReq(header *Header) (*define.Param, *txv2.Bundle
 				},
 			}
 			bsr.TxsData = append(bsr.TxsData, t)
-		}
-
-		builderPercent = 0
-		if percent, ok := BuilderPercentMap[bundle.Parent.RPCID]; ok {
-			builderPercent = percent
-		} else {
-			builderPercent = RpcBuilderProfitPercent
 		}
 
 		for _, bgTx := range bundle.Txs {
@@ -315,12 +298,7 @@ func (bundle *Bundle) GenBuilderReq(header *Header) (*define.Param, *txv2.Bundle
 			bsr.TxsData = append(bsr.TxsData, t)
 		}
 
-		builderPercent := 0
-		if percent, ok := BuilderPercentMap[bundle.Parent.RPCID]; ok {
-			builderPercent = percent
-		} else {
-			builderPercent = RpcBuilderProfitPercent
-		}
+		builderPercent := RpcBuilderProfitPercent
 
 		for _, bgTx := range bundle.Txs {
 			t := &txv2.TxsData{

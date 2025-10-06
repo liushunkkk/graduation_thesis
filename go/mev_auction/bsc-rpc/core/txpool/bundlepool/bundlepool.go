@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/duke-git/lancet/v2/random"
+	"github.com/ethereum/go-ethereum/arbi_detector"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/ms"
 	"github.com/ethereum/go-ethereum/core"
@@ -251,12 +252,7 @@ func (bg *BundleGroup) Reset(header *types.Header) (closed bool, delHash []commo
 		if bd != nil {
 			bd.ProxyBidContract = types.ProxyContractAddress.Hex()
 			bd.RefundAddress = bg.Original.RefundAddress.Hex()
-
-			if percent, ok := types.BuilderPercentMap[bg.Original.RPCID]; ok {
-				bd.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bg.Original.RefundPercent*1000 + percent
-			} else {
-				bd.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bg.Original.RefundPercent*1000 + types.RpcBuilderProfitPercent
-			}
+			bd.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bg.Original.RefundPercent*1000 + types.RpcBuilderProfitPercent
 			sseData = bd
 		}
 		bg.Original.Price = price
@@ -324,12 +320,7 @@ func (bg *BundleGroup) Simulate(bundle *types.Bundle) (*define.SseBundleData, er
 		if sseBundleData != nil {
 			sseBundleData.ProxyBidContract = types.ProxyContractAddress.Hex()
 			sseBundleData.RefundAddress = bundle.RefundAddress.Hex()
-
-			if percent, ok := types.BuilderPercentMap[bundle.RPCID]; ok {
-				sseBundleData.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bundle.RefundPercent*1000 + percent
-			} else {
-				sseBundleData.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bundle.RefundPercent*1000 + types.RpcBuilderProfitPercent
-			}
+			sseBundleData.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bundle.RefundPercent*1000 + types.RpcBuilderProfitPercent
 		}
 
 		bg.rwMtx.Lock()
@@ -628,6 +619,28 @@ func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
 	}
 
 	bundleData, err := group.Simulate(bundle)
+	if bundle.Parent != nil && bundleData != nil {
+		var arbiReq []arbi_detector.ArbiRequest
+		for _, t := range bundleData.SseTxs {
+			arbiReq = append(arbiReq, arbi_detector.ArbiRequest{
+				TxHash:      t.Hash,
+				TxJson:      t.Tx,
+				ReceiptJson: t.ReceiptJson,
+			})
+		}
+		arbiResult, _ := arbi_detector.DetectBatchArbi(arbiReq)
+		isArbi := false
+		if arbiResult != nil {
+			for _, arbi := range arbiResult.Results {
+				if arbi.ArbitragePercent > 0.4 { // 适当放宽
+					isArbi = true
+				}
+			}
+			if len(arbiResult.Results) > 1 && !isArbi { // 如果判断了，但是没有符合要求就跳过
+				return errors.New("not arbi")
+			}
+		}
+	}
 
 	if err != nil {
 		Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))

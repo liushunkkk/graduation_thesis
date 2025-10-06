@@ -317,12 +317,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	portal.Address = stack.Config().PortalAddress
 	portal.ApiHealth = stack.Config().ApiHealth
 	types.RpcBuilderProfitPercent = stack.Config().BuilderProfitPercent
-	types.BuilderProfitPercentList = stack.Config().BuilderProfitPercentList
 	types.RpcIdList = stack.Config().RpcIdList
-
-	for i, rpc := range types.RpcIdList {
-		types.BuilderPercentMap[rpc] = types.BuilderProfitPercentList[i]
-	}
 
 	types.BidContractAddress = common.HexToAddress(stack.Config().BidContractAddress)
 	types.ProxyContractAddress = common.HexToAddress(stack.Config().ProxyContractAddress)

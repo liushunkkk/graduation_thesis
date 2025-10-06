@@ -39,7 +39,7 @@ type SseBundleData struct {
 }
 
 type SseTxData struct {
-	Tx               string   `json:"tx,omitempty"`
+	Tx               string   `json:"-"` // 不参与序列话
 	Hash             string   `json:"hash,omitempty"`
 	From             string   `json:"from,omitempty"`
 	To               string   `json:"to,omitempty"`
@@ -50,7 +50,8 @@ type SseTxData struct {
 	GasLimit         uint64   `json:"gasLimit,omitempty"`
 	GasPrice         uint64   `json:"gasPrice,omitempty"`
 	Logs             []SseLog `json:"logs,omitempty"`
-	Selector         string   `json:"-"`
+	ReceiptJson      string   `json:"-"` // 不参与序列话
+	Selector         string   `json:"-"` // 不参与序列话
 }
 
 type SseLog struct {

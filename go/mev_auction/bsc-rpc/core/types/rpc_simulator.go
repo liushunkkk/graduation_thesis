@@ -11,9 +11,7 @@ import (
 )
 
 var (
-	RpcIdList                []string
-	BuilderProfitPercentList []int
-	BuilderPercentMap        = make(map[string]int)
+	RpcIdList []string // 需要观察的rpcId列表
 
 	BidContractAddress      = common.Address{} // rpc system address to receive refund
 	ProxyContractAddress    = common.Address{}
@@ -67,6 +65,8 @@ func (r *RpcSimulator) GetBribeToBuilderAndSender(totalBribe *big.Int, refundPer
 
 func (r *RpcSimulator) BuildTxData(bundle *Bundle, tx *Transaction, receipt *Receipt) (define.SseTxData, error) {
 	var logs []define.SseLog
+	receiptJson, _ := receipt.MarshalJSON()
+	txJson, _ := tx.MarshalJSON()
 	for _, receiptLog := range receipt.Logs {
 		var topicStrings []string
 		for _, b := range receiptLog.Topics {
@@ -110,6 +110,8 @@ func (r *RpcSimulator) BuildTxData(bundle *Bundle, tx *Transaction, receipt *Rec
 		GasPrice:         cast.ToUint64(bundle.ValueBaseHint(HintGasPrice, tx.GasPrice().Uint64(), 0)),
 		Logs:             bundle.ValueBaseHint(HintLogs, logs, []define.SseLog{}).([]define.SseLog),
 		Selector:         functionSelector,
+		ReceiptJson:      string(receiptJson),
+		Tx:               string(txJson),
 	}
 	if tx.To() != nil {
 		currTxData.To = bundle.ValueBaseHint(HintTo, tx.To().Hex(), "").(string)

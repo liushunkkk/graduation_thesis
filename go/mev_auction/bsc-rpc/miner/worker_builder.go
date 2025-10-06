@@ -673,12 +673,7 @@ func (w *worker) WorkerExecuteBundle(
 			return nil, nil, errors.New("bribe value is too small")
 		}
 
-		builderPercent := 0
-		if percent, ok := types.BuilderPercentMap[bundle.Parent.RPCID]; ok {
-			builderPercent = percent
-		} else {
-			builderPercent = types.RpcBuilderProfitPercent
-		}
+		builderPercent := types.RpcBuilderProfitPercent
 
 		if rpcBribeDelta.Cmp(big.NewInt(0)) > 0 {
 			if refundRecipientDelta.Cmp(big.NewInt(0)) <= 0 {
