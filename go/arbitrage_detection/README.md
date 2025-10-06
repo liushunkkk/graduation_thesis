@@ -18,3 +18,22 @@ go的版本为1.23.4
 5、运行 `go run main.go`
 
 最终所有的数据都会存入mysql数据库中，正负样本默认比例为1:2
+
+
+## 说明
+
+arbi_collector.go：套利数据分析与收集
+
+constants.go：常量
+
+db_connection.go：数据库连接管理
+
+dto.go：dto模型管理
+
+eth_client.go：bsc区块链连接管理
+
+model.go：数据库模型
+
+model_helper.go：模型转换帮助函数，model->dto
+
+runner.go：执行器，里面包含完整数据收集以及非套利交易收集的具体过程
