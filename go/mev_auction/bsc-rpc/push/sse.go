@@ -7,7 +7,6 @@ import (
 	"github.com/duke-git/lancet/v2/random"
 	"github.com/ethereum/go-ethereum/common/ms"
 	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/portal"
 	"github.com/ethereum/go-ethereum/push/define"
 	"go.uber.org/zap"
@@ -18,11 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-)
-
-var (
-	sseClientGauge    = metrics.NewRegisteredGauge("sse/clients", nil)
-	sseSubscribeGauge = metrics.NewRegisteredGauge("sse/subscriptions", nil)
 )
 
 type SSEServer struct {
@@ -121,11 +115,8 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.clients[host]++
-	sseSubscribeGauge.Inc(1)
-	sseClientGauge.Update(int64(len(p.clients)))
 	str := strings.ReplaceAll(host, ".", "_")
 	str = str + "_" + strconv.Itoa(p.clients[host])
-	sseWaitingGauge := metrics.NewRegisteredGauge("sse/waiting/"+str, nil)
 	p.clientsMtx.Unlock()
 
 	defer func() {
@@ -135,9 +126,6 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.clients[host] == 0 {
 			delete(p.clients, host)
 		}
-		sseClientGauge.Update(int64(len(p.clients)))
-		sseSubscribeGauge.Dec(1)
-		sseWaitingGauge.Update(0)
 	}()
 
 	query := r.URL.Query()
@@ -176,7 +164,6 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	batchSize := 20
 	processed := 0
 	for {
-		sseWaitingGauge.Update(int64(len(sub.Channel)))
 		select {
 		case bd := <-sub.Channel:
 			if time.Since(*bd.CreateTime) > 400*time.Millisecond {

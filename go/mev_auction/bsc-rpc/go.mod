@@ -1,4 +1,4 @@
-module github.com/ethereum/go-ethereum
+module github.com/ethereum/go-ethereum-test
 
 go 1.22
 
@@ -344,6 +344,7 @@ require (
 )
 
 replace (
+	github.com/ethereum/go-ethereum => /Users/liushun/Documents/GoWorkspace/src/bsc-rpc
 	//github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.23.0
 	//github.com/grpc-ecosystem/grpc-gateway/v2 => github.com/prysmaticlabs/grpc-gateway/v2 v2.3.1-0.20210702154020-550e1cd83ec1
 	//github.com/cometbft/cometbft => github.c`om/bnb-chain/greenfield-tendermint v0.0.0-20230417032003-4cda1f296fb2

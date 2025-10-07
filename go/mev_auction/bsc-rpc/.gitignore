@@ -56,6 +56,6 @@ logs/
 tests/spec-tests/
 cmd/geth/geth
 /accounts/bribe/keystore/
-/core/txpool/bundlepool/log/
+/bundlepool/log/
 /push/log/
 /validator/log/
