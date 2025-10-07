@@ -1,0 +1,148 @@
+package mevshare
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"math/rand"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/redis/go-redis/v9"
+	"github.com/ybbus/jsonrpc/v3"
+)
+
+type HintBackend interface {
+	NotifyHint(ctx context.Context, hint *Hint) error
+}
+
+type BuilderBackend interface {
+	String() string
+	SendMatchedShareBundle(ctx context.Context, bundle *SendMevBundleArgs) error
+	CancelBundleByHash(ctx context.Context, hash common.Hash) error
+}
+
+// SimulationBackend is an interface for simulating transactions
+// There should be one simulation backend per worker node
+type SimulationBackend interface {
+	SimulateBundle(ctx context.Context, bundle *SendMevBundleArgs, aux *SimMevBundleAuxArgs) (*SimMevBundleResponse, error)
+}
+
+type JSONRPCSimulationBackend struct {
+	client jsonrpc.RPCClient
+}
+
+// NewJSONRPCSimulationBackend 创建 jsonrpc 的连客户端连接
+func NewJSONRPCSimulationBackend(url string) *JSONRPCSimulationBackend {
+	return &JSONRPCSimulationBackend{
+		client: jsonrpc.NewClient(url),
+		// todo here use optsx
+	}
+}
+
+func replaceRevertModeForSimulation(bundle *SendMevBundleArgs) *SendMevBundleArgs {
+	newB := &SendMevBundleArgs{
+		Version:         bundle.Version,
+		ReplacementUUID: "",
+		Inclusion:       bundle.Inclusion,
+		Body:            nil,
+		Validity:        bundle.Validity,
+		Privacy:         bundle.Privacy,
+		Metadata:        bundle.Metadata,
+	}
+
+	for _, el := range bundle.Body {
+		var newEl MevBundleBody
+		if el.Tx != nil {
+			if el.RevertMode == "drop" {
+				newEl.CanRevert = true
+				newEl.Tx = el.Tx
+			} else {
+				newEl.CanRevert = el.CanRevert
+				newEl.Tx = el.Tx
+			}
+		}
+		if el.Bundle != nil {
+			newEl.Bundle = replaceRevertModeForSimulation(el.Bundle)
+		}
+		newB.Body = append(newB.Body, newEl)
+	}
+	return newB
+}
+
+// SimulateBundle 调用别的服务的 mev_simBundle rpc接口
+func (b *JSONRPCSimulationBackend) SimulateBundle(ctx context.Context, bundle *SendMevBundleArgs, aux *SimMevBundleAuxArgs) (*SimMevBundleResponse, error) {
+	var result SimMevBundleResponse
+	// we need a hack here until mev_simBundle supports revertMode, we will treat revertMode=drop as canRevert=true so that bundle passes simulation
+	newBundle := replaceRevertModeForSimulation(bundle)
+	if newBundle.Body[0].Bundle != nil {
+		time.Sleep(30 * time.Millisecond)
+	} else {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := rand.Intn(100); n > 90 {
+		return &result, errors.New("SimulationBackend: unable to simulate bundle")
+	}
+	result.Success = true
+	//err := b.client.CallFor(ctx, &result, "mev_simBundle", newBundle, aux)
+	return &result, nil
+}
+
+type RedisHintBackend struct {
+	client     *redis.Client
+	pubChannel string
+}
+
+func NewRedisHintBackend(redisClient *redis.Client, pubChannel string) *RedisHintBackend {
+	return &RedisHintBackend{
+		client:     redisClient,
+		pubChannel: pubChannel,
+	}
+}
+
+func (b *RedisHintBackend) NotifyHint(ctx context.Context, hint *Hint) error {
+	data, err := json.Marshal(hint)
+	if err != nil {
+		return err
+	}
+	return b.client.Publish(ctx, b.pubChannel, data).Err()
+}
+
+// JSONRPCBuilder 下面这部分没有用到
+type JSONRPCBuilder struct {
+	url    string
+	client jsonrpc.RPCClient
+}
+
+func NewJSONRPCBuilder(url string) *JSONRPCBuilder {
+	return &JSONRPCBuilder{
+		url:    url,
+		client: jsonrpc.NewClient(url),
+	}
+}
+
+func (b *JSONRPCBuilder) String() string {
+	return b.url
+}
+
+func (b *JSONRPCBuilder) SendMatchedShareBundle(ctx context.Context, bundle *SendMevBundleArgs) error {
+	res, err := b.client.Call(ctx, "mev_sendBundle", []*SendMevBundleArgs{bundle})
+	if err != nil {
+		return err
+	}
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
+}
+
+func (b *JSONRPCBuilder) CancelBundleByHash(ctx context.Context, hash common.Hash) error {
+	res, err := b.client.Call(ctx, "mev_cancelBundleByHash", []common.Hash{hash})
+	if err != nil {
+		return err
+	}
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
+}
