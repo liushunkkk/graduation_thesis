@@ -23,7 +23,7 @@ def load_model(load_path):
     return model
 
 
-save_path = "arbi_model.pth"
+save_path = "../char_level/models/model_epoch_5.pth"
 loaded_model: char_level.model_trainer.TxClassifier = load_model(save_path)
 
 
@@ -90,9 +90,6 @@ class BatchArbiResult(BaseModel):
 
 # 处理单个套利检测
 def process_single_arbi(request_data: ArbiRequest) -> ArbiResult:
-    # 实际业务逻辑
-    arbitrage_percent = 0.5
-
     # 解析txJson和receiptJson
     tx_data = parse_json_safely(request_data.txJson)
     receipt_data = parse_json_safely(request_data.receiptJson)
@@ -125,6 +122,8 @@ def process_single_arbi(request_data: ArbiRequest) -> ArbiResult:
     input_tensor = torch.tensor(df.values, dtype=torch.float32)
 
     with torch.no_grad():
+        device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+        input_tensor.to(device)
         output = loaded_model(input_tensor)
         print("模型输出:", output)
 
