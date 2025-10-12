@@ -111,7 +111,7 @@ class ArbiNetTrainer:
         all_true = torch.cat(all_true)
         metrics = self.evaluate_metrics(all_pred, all_true)
 
-        print(f"\nTest Metrics | Acc: {metrics['accuracy']:.4f} | "
+        print(f"Test Metrics | Acc: {metrics['accuracy']:.4f} | "
               f"Precision: {metrics['precision']:.4f} | Recall: {metrics['recall']:.4f} | "
               f"F1: {metrics['f1']:.4f} | TP: {metrics['tp']} | TN: {metrics['tn']} | "
               f"FP: {metrics['fp']} | FN: {metrics['fn']}")

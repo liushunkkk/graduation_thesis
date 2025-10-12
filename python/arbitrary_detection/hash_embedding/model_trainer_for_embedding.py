@@ -16,7 +16,8 @@ class TxDataset(Dataset):
         # [gas_price,gas_tip_cap,gas_fee_cap,gas,value,gas_used,effective_gas_price,transaction_index,data_len,logs_len,transfer_len]
         selected_idx = [3, 5, 8, 9, 10]
         # 原始 num_feature 是字符串形式，需要先 eval，再筛选
-        self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
+        # self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
+        self.num_features = df[["gas", "gas_used", 'data_len', 'logs_len']].values.tolist()
         # self.num_features = df['num_feature'].apply(eval).tolist()
         self.data_features = df['data_feature'].apply(eval).tolist()
         self.logs_features = df['logs_feature'].apply(eval).tolist()
@@ -219,7 +220,7 @@ def plot_metrics(train_metrics, val_metrics, metric_name):
 
 
 # ====== 训练函数 ======
-def train_model(pos_csv, neg_csv, use_features=None, mode='cnn', data_vocab_size=60000, logs_vocab_size=80000,
+def train_model(pos_csv, neg_csv, use_features=None, mode='multihead', data_vocab_size=60000, logs_vocab_size=60000,
                 batch_size=512, epochs=5, lr=1e-3, test_ratio=0.2):
     if use_features is None:
         use_features = ["num", "data", "logs"]
@@ -243,7 +244,8 @@ def train_model(pos_csv, neg_csv, use_features=None, mode='cnn', data_vocab_size
         # 保存
         train_df.to_csv(f"../{TARGET}/datasets/train.csv", index=False)
         test_df.to_csv(f"../{TARGET}/datasets/test.csv", index=False)
-        print(f"保存完成: ../{TARGET}/datasets/train.csv {len(train_df)} 条, ../{TARGET}/datasets/test.csv {len(test_df)} 条")
+        print(
+            f"保存完成: ../{TARGET}/datasets/train.csv {len(train_df)} 条, ../{TARGET}/datasets/test.csv {len(test_df)} 条")
 
     print("load train and test dataset...")
     train_set = TxDataset(f"../{TARGET}/datasets/train.csv")
@@ -338,5 +340,5 @@ if __name__ == "__main__":
     pos_csv = f"../{TARGET}/datasets/positive_data.csv"
     neg_csv = f"../{TARGET}/datasets/negative_data.csv"
     # attention, cnn, lstm, multihead, multihead_pos
-    model = train_model(pos_csv, neg_csv, batch_size=128, mode='multihead', use_features=["num", "data", "logs"],
+    model = train_model(pos_csv, neg_csv, batch_size=128, mode='cnn', use_features=["data", "logs"],
                         epochs=30)

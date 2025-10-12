@@ -16,7 +16,7 @@ class TxDataset(Dataset):
         # [gas_price,gas_tip_cap,gas_fee_cap,gas,value,gas_used,effective_gas_price,transaction_index,data_len,logs_len,transfer_len]
         selected_idx = [3, 5, 8, 9]
         # 原始 num_feature 是字符串形式，需要先 eval，再筛选
-        self.num_features = df[["gas", "gas_used"]].values.tolist()
+        self.num_features = df[["gas", "gas_used", 'data_len', 'logs_len']].values.tolist()
         # self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
         # self.num_features = df['num_feature'].apply(eval).tolist()
         self.data_features = df['data_feature'].apply(eval).tolist()
@@ -195,6 +195,7 @@ def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=20000, logs
     print("load train and test dataset...")
     train_set = TxDataset(f"../{TARGET}/datasets/train.csv")
     test_set = TxDataset(f"../{TARGET}/datasets/test.csv")
+    print("len(train_set): ", len(train_set), "len(test_set): ", len(test_set))
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
@@ -284,4 +285,4 @@ if __name__ == "__main__":
     TARGET = "all_data"  # half_data or all_data
     pos_csv = f"../{TARGET}/datasets/positive_data.csv"
     neg_csv = f"../{TARGET}/datasets/negative_data.csv"
-    model = train_model(pos_csv, neg_csv, batch_size=128, use_features=["num"], epochs=30)
+    model = train_model(pos_csv, neg_csv, batch_size=128, use_features=["data", "logs"], epochs=30)

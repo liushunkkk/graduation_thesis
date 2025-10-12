@@ -202,14 +202,14 @@ class FeaturePreprocessor:
 
 
 if __name__ == "__main__":
-    input_file = "../files/positive_data.csv"
-    output_file = "./datasets/positive_data.csv"
-    processor = FeaturePreprocessor(input_file, output_file)
-    processor.run()
-
-    output = pd.read_csv(output_file)
-    print(output.columns)
-    print(output[:1])
+    # input_file = "../files/positive_data.csv"
+    # output_file = "./datasets/positive_data.csv"
+    # processor = FeaturePreprocessor(input_file, output_file)
+    # processor.run()
+    #
+    # output = pd.read_csv(output_file)
+    # print(output.columns)
+    # print(output[:1])
 
     # 负样本和正样本数量2:1
     input_file = "../files/negative_data.csv"

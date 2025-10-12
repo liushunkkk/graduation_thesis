@@ -204,23 +204,23 @@ class StructFeatureAnalyzer:
 if __name__ == "__main__":
     global TARGET
     TARGET = "all_data" # all_data or half_data
-    # num_cols = [
-    #     "gas_price",
-    #     "gas_tip_cap",
-    #     "gas_fee_cap",
-    #     "gas",
-    #     "value",
-    #     "gas_used",
-    #     "effective_gas_price",
-    #     "transaction_index"
-    # ]
-    # analyzer = NumFeatureAnalyzer(f"../{TARGET}/datasets/positive_data.csv", f"../{TARGET}/datasets/negative_data.csv", num_cols)
-    # results = analyzer.analyze()
-    # for r in results:
-    #     print(f"{r['feature']}: cohen_d={r['cohen_d']:.3f}, overlap_area={r['overlap_area']:.3f}, "
-    #           f"pos_mean={r['pos_mean']:.3f}, neg_mean={r['neg_mean']:.3f}")
-    #
-    # analyzer.plot_distributions(features=num_cols, right_clip_quantile=0.95)
+    num_cols = [
+        "gas_price",
+        "gas_tip_cap",
+        "gas_fee_cap",
+        "gas",
+        "value",
+        "gas_used",
+        "effective_gas_price",
+        "transaction_index"
+    ]
+    analyzer = NumFeatureAnalyzer(f"../{TARGET}/datasets/positive_data.csv", f"../{TARGET}/datasets/negative_data.csv", num_cols)
+    results = analyzer.analyze()
+    for r in results:
+        print(f"{r['feature']}: cohen_d={r['cohen_d']:.3f}, overlap_area={r['overlap_area']:.3f}, "
+              f"pos_mean={r['pos_mean']:.3f}, neg_mean={r['neg_mean']:.3f}")
+
+    analyzer.plot_distributions(features=num_cols, right_clip_quantile=0.95)
 
     analyzer = StructFeatureAnalyzer(f"../{TARGET}/datasets/positive_data.csv", f"../{TARGET}/datasets/negative_data.csv",
                                      clip_percentile=0.95)

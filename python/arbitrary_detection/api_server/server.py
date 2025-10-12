@@ -9,7 +9,7 @@ from typing import List
 
 from sklearn.preprocessing import StandardScaler
 
-import char_level.model_trainer
+import char_level.model_trainer_mean
 
 app = Flask(__name__)
 

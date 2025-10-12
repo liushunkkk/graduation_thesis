@@ -8,7 +8,7 @@ import hashlib
 
 
 class FeaturePreprocessor:
-    def __init__(self, input_file: str, output_file: str, vocab_size=20000, data_max_len=48, logs_max_len=64):
+    def __init__(self, input_file: str, output_file: str, vocab_size=60000, data_max_len=48, logs_max_len=64):
         self.input_file = input_file
         self.output_file = output_file
         self.df = None
