@@ -1,12 +1,12 @@
-package bundlepool
+package base
 
 import (
-	"github.com/ethereum/go-ethereum-test/core/types"
+	"github.com/ethereum/go-ethereum-test/push/define"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/push/define"
 	"github.com/spf13/cast"
 	"math/big"
 )
@@ -23,6 +23,10 @@ var (
 	RpcGasPrice = new(big.Int).Mul(big.NewInt(1), big.NewInt(params.GWei))
 	RpcGasLimit = big.NewInt(21_000)
 )
+
+type BundleSimulator interface {
+	ExecuteBundle(parent *types.Header, bundle *Bundle, rpcBribeAddress common.Address) (*big.Int, *define.SseBundleData, error)
+}
 
 // RpcSimulator simulator for rpc service
 type RpcSimulator struct{}

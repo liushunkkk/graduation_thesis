@@ -97,6 +97,7 @@ class TxEncoder(nn.Module):
     对交易的多个特征（num/data/logs）进行编码
     支持四种序列建模方式：attn / attn_pos / lstm / cnn / mean
     """
+
     def __init__(self, num_dim=8, emb_dim=128, use_features=None,
                  data_len=48, logs_len=64, seq_mode="attn_pos"):
         """
@@ -243,21 +244,10 @@ def evaluate(loader, model, thresholds=None, device=torch.device('cpu')):
 
 
 # ====== 训练函数 ======
-def train_model(pos_csv, neg_csv, use_features=None, seq_mode='attn',
-                batch_size=128, epochs=10, lr=1e-3, test_ratio=0.2):
+def train_model(use_features=None, seq_mode='attn',
+                batch_size=128, epochs=10, lr=1e-3):
     if use_features is None:
         use_features = ["num", "data", "logs"]
-
-    if not os.path.exists(f"../{TARGET}/datasets/train.csv"):
-        print("重新构建")
-        pos_df = pd.read_csv(pos_csv)
-        pos_df['label'] = 1
-        neg_df = pd.read_csv(neg_csv)
-        neg_df['label'] = 0
-        df = pd.concat([pos_df, neg_df]).sort_values("block_number").reset_index(drop=True)
-        test_size = int(len(df) * test_ratio)
-        df.iloc[:-test_size].to_csv(f"../{TARGET}/datasets/train.csv", index=False)
-        df.iloc[-test_size:].to_csv(f"../{TARGET}/datasets/test.csv", index=False)
 
     train_set = TxDataset(f"../{TARGET}/datasets/train.csv")
     test_set = TxDataset(f"../{TARGET}/datasets/test.csv")
@@ -322,4 +312,4 @@ if __name__ == "__main__":
     pos_csv = f"../{TARGET}/datasets/positive_data.csv"
     neg_csv = f"../{TARGET}/datasets/negative_data.csv"
     # attn lstm cnn mean attn_pos
-    model = train_model(pos_csv, neg_csv, use_features=["logs", "data"], seq_mode='mean', epochs=20)
+    model = train_model(use_features=["logs", "data"], seq_mode='mean', epochs=20)
