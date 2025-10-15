@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -24,7 +25,7 @@ func NewUser(id int, rpcURL string) *User {
 }
 
 func (u *User) Start() {
-	ticker := time.NewTicker(2000 * time.Millisecond)
+	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -48,25 +49,24 @@ func (u *User) sendTransaction() {
 
 	args := &model.SendRawTransactionArgs{
 		Input:          input,
-		MaxBlockNumber: 1,
+		MaxBlockNumber: GlobalBlockManager.GetCurrentBlock() + 1,
 	}
 
 	resp, err := u.rpc.SendRawTransaction(args)
 	if err != nil {
-		zap_logger.Zap.Info(fmt.Sprintf("User %d 发送交易失败: %v\n", u.id, err))
+		zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 发送交易失败: %v", u.id, err))
 		return
 	}
 
 	u.txCount++
 	if resp != nil {
-		zap_logger.Zap.Info(fmt.Sprintf("User %d 发送交易成功 #%d, 返回TxHash: %s\n", u.id, u.txCount, resp.TxHash.Hex()))
+		zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 发送交易成功 #%d", u.id, u.txCount), zap.Any("sendTime", time.Now().UnixNano()), zap.Any("txHash", tx.Hash().Hex()), zap.Any("respTxHash", resp.TxHash.Hex()))
 	}
 }
 
-func InitUser() {
+func InitUser(num int) {
 	rpcURL := "http://localhost:8080"
-	userCount := 1 // 可以模拟多个用户
-	for i := 1; i <= userCount; i++ {
+	for i := 1; i <= num; i++ {
 		user := NewUser(i, rpcURL)
 		go user.Start()
 	}

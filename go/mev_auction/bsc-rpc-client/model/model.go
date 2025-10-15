@@ -58,6 +58,7 @@ type SendRawTransactionResponse struct {
 
 type ResetHeaderArgs struct {
 	HeaderNumber uint64
+	Time         uint64
 }
 
 type ResetHeaderResponse struct {

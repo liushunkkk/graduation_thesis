@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"net/http"
 	"time"
 )
@@ -57,6 +58,7 @@ func NewJSONRPCClient(url string) *JSONRPCClient {
 
 // Call 发起 JSON-RPC 调用
 func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCResponse, error) {
+	start := time.Now()
 	rawParams, err := encodeParams(params)
 	if err != nil {
 		return nil, fmt.Errorf("encode params error: %w", err)
@@ -80,6 +82,10 @@ func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCRespons
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
 		return nil, fmt.Errorf("decode response error: %w", err)
 	}
+
+	end := time.Now()
+
+	zap_logger.Zap.Info(fmt.Sprintf("[call-%s]", method), zap.Any("cost", end.Sub(start).Nanoseconds()))
 
 	if rpcResp.Error != nil {
 		return &rpcResp, fmt.Errorf("RPC error: %d - %s", rpcResp.Error.Code, rpcResp.Error.Message)
@@ -124,7 +130,10 @@ func (c *JSONRPCClient) SendRawTransaction(args *model.SendRawTransactionArgs) (
 
 // ResetHeader 重置区块头
 func (c *JSONRPCClient) ResetHeader(blockNumber uint64) error {
-	resp, err := c.Call(ResetHeaderEndpointName, blockNumber)
+	resp, err := c.Call(ResetHeaderEndpointName, &model.ResetHeaderArgs{
+		HeaderNumber: blockNumber,
+		Time:         uint64(time.Now().Unix()),
+	})
 	if err != nil {
 		return fmt.Errorf("ResetHeader 调用失败: %w", err)
 	}

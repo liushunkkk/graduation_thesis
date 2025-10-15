@@ -12,7 +12,7 @@ type BlockNumberManager struct {
 }
 
 // GlobalBlockManager 全局实例
-var GlobalBlockManager = &BlockNumberManager{current: 1}
+var GlobalBlockManager = &BlockNumberManager{current: 100}
 
 // StartAutoIncrement 每隔3秒自动自增1
 func (m *BlockNumberManager) StartAutoIncrement() {

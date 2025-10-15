@@ -46,7 +46,7 @@ func (l *TxLoader) LoadFromDB(limit int) error {
 	l.txs = txs
 	l.index = 0
 	l.loaded = true
-	zap_logger.Zap.Info(fmt.Sprintf("已加载 %d 条交易到内存\n", len(l.txs)))
+	zap_logger.Zap.Info(fmt.Sprintf("已加载 %d 条交易到内存", len(l.txs)))
 	return nil
 }
 

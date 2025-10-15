@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"go.uber.org/zap"
 	"io"
 	"math/rand"
 	"net/http"
@@ -83,21 +84,21 @@ func (s *Searcher) Start() {
 	req, _ := http.NewRequest("GET", s.stream, nil)
 	resp, err := s.client.Do(req)
 	if err != nil {
-		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] SSE连接失败: %v\n", s.id, s.group, err))
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] SSE连接失败: %v", s.id, s.group, err))
 		return
 	}
 	defer resp.Body.Close()
 
 	reader := bufio.NewReader(resp.Body)
-	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 已连接SSE\n", s.id, s.group))
+	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 已连接SSE", s.id, s.group))
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] SSE连接关闭\n", s.id))
+				zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] SSE连接关闭", s.id))
 				return
 			}
-			zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 读取错误: %v\n", s.id, err))
+			zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 读取错误: %v", s.id, err))
 			return
 		}
 
@@ -115,17 +116,28 @@ func (s *Searcher) Start() {
 	}
 }
 
+func getAllTxHash(msg *SseBundleData) []string {
+	var res []string
+	for _, tx := range msg.SseTxs {
+		res = append(res, tx.Hash)
+	}
+	return res
+}
+
 func (s *Searcher) handleMessage(msg *SseBundleData) {
 	r := rand.Float64()
-	if r < s.prob {
+	if len(msg.SseTxs) == 1 && r < s.prob {
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive one level bundle，准备发送，概率值： (%.2f)/[%s]",
+			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixNano()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
 		// 随机休眠一段时间，模拟在计算
 		time.Sleep(time.Millisecond * time.Duration(RandomAround400()))
-		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 收到 bundle (%s)，发送响应 (%.0f%%)\n",
-			s.id, s.group, msg.Hash, s.prob*100))
 		s.sendBundle(msg)
-	} else {
-		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 收到 bundle (%s)，跳过发送 (%.0f%%)\n",
-			s.id, s.group, msg.Hash, s.prob*100))
+	} else if len(msg.SseTxs) == 2 && r < s.prob/3.0 {
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive two level bundle，准备发送，概率值： (%.2f)/[%s]",
+			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixNano()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
+		// 随机休眠一段时间，模拟在计算
+		time.Sleep(time.Millisecond * time.Duration(RandomAround400()))
+		s.sendBundle(msg)
 	}
 }
 
@@ -149,26 +161,25 @@ func (s *Searcher) sendBundle(msg *SseBundleData) {
 	}
 	resp, err := s.rpcClient.SendMevBundle(args)
 	if err != nil {
-		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 发送bundle失败: %v\n", s.id, err))
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] 发送bundle失败: %v", s.id, err))
 		return
 	}
-	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 发送bundle成功，BundleHash: %s\n", s.id, resp.BundleHash.Hex()))
+	zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] 发送bundle成功，BundleHash: %s", s.id, resp.BundleHash.Hex()))
 }
 
-func InitSearcher() {
+func InitSearcher(num int) {
 	rand.Seed(time.Now().UnixNano())
 
 	streamURL := "http://localhost:8080/stream"
 	rpcURL := "http://localhost:8080"
-
 	var searchers []*Searcher
-	for i := 0; i < 5; i++ {
+	for i := 0; i < num; i++ {
 		searchers = append(searchers, NewSearcher(i+1, "A", 0.9, streamURL, rpcURL))
 	}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < num; i++ {
 		searchers = append(searchers, NewSearcher(6+i, "B", 0.7, streamURL, rpcURL))
 	}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < num; i++ {
 		searchers = append(searchers, NewSearcher(11+i, "C", 0.5, streamURL, rpcURL))
 	}
 
@@ -178,6 +189,6 @@ func InitSearcher() {
 }
 
 func RandomAround400() int64 {
-	rand.Seed(time.Now().UnixNano())       // 记得只在程序启动时调用一次
-	return int64(400 + rand.Intn(41) - 20) // 400 ±20 => [380,420]
+	rand.Seed(time.Now().UnixNano())        // 记得只在程序启动时调用一次
+	return int64(400 + rand.Intn(101) - 50) // 400 ±50 => [350,450]
 }
