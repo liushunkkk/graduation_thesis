@@ -1,10 +1,10 @@
 package base
 
 import (
+	"github.com/ethereum/go-ethereum-test/push/define"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/portal/zrpc_client/typed/rpc_portal/txv2"
-	"github.com/ethereum/go-ethereum/push/define"
 	"golang.org/x/crypto/sha3"
 	"math/big"
 	"sync/atomic"
@@ -14,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rlp"
 )
+
+var CurrentHeader *types.Header
 
 const (
 	// MaxTxPerBundle is the max transactions in each bundle
@@ -198,6 +200,7 @@ func (bundle *Bundle) GenBuilderReq(header *types.Header) (*define.Param, *txv2.
 		MinTimestamp:      0,
 		MaxTimestamp:      0,
 		RevertingTxHashes: bundle.GetRevertingTxHashes(),
+		ArrivalTime:       bundle.ArrivalTime,
 	}
 	if p.MaxBlockNumber > header.Number.Uint64()+100 {
 		p.MaxBlockNumber = header.Number.Uint64() + 100

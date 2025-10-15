@@ -619,3 +619,145 @@ func RunDataFillFromAddressComparison() {
 		id++
 	}
 }
+
+// RunComparisonDatasetCollectionV2 收集对比数据
+// 根据套利数据集的中的交易，每个block_number随机收集两倍的交易即可
+func RunComparisonDatasetCollectionV2() {
+	ctx := context.Background()
+	// 先查出所有的 block_number
+	var blockNumberStrs []string
+	tx := DB.Table(Table_EthereumTransactions).Distinct("block_number").Find(&blockNumberStrs)
+	if tx.Error != nil || len(blockNumberStrs) == 0 {
+		fmt.Printf("select block number fail, err: %s\n", tx.Error.Error())
+	}
+	fmt.Printf("select block numbers success, count: %d\n", len(blockNumberStrs))
+
+	// 排序
+	var blockNumbers []int
+	for _, blockNumberStr := range blockNumberStrs {
+		n, err := strconv.Atoi(blockNumberStr)
+		if err != nil {
+			fmt.Printf("[%s] atoi fail, err: %s\n", blockNumberStr, err)
+		}
+		blockNumbers = append(blockNumbers, n)
+	}
+	slices.Sort(blockNumbers)
+
+	collectOne := func(bn int) error {
+		// 获取数据库中该区块交易个数
+		var currTxs []*EthereumTransaction
+		tx := DB.Table(Table_EthereumTransactions).Where("block_number", bn).Find(&currTxs)
+		if tx.Error != nil {
+			return fmt.Errorf("get tx count in database fail, err: %s", tx.Error.Error())
+		}
+		fmt.Printf("[%d] get tx count: %d\n", bn, len(currTxs))
+
+		blockNumber := big.NewInt(int64(bn))
+		// 拿到block
+		block, err := EthClient.BlockByNumber(ctx, blockNumber)
+		if err != nil {
+			return fmt.Errorf("get eth block fail, err: %s", err)
+		}
+		if block == nil {
+			return fmt.Errorf("get eth block fail, block is nil")
+		}
+
+		transactions := block.Transactions()
+
+		rand.Shuffle(len(transactions), func(i, j int) {
+			transactions[i], transactions[j] = transactions[j], transactions[i]
+		})
+
+		count := 1
+
+		for _, target := range transactions {
+			exist := slices.ContainsFunc(currTxs, func(transaction *EthereumTransaction) bool {
+				return transaction.TxHash == target.Hash().Hex()
+			})
+			if exist {
+				continue
+			}
+			if count > 20*len(currTxs) {
+				break
+			}
+			tx, _, err := EthClient.TransactionByHash(ctx, target.Hash())
+
+			if err != nil {
+				fmt.Printf("[%s] TransactionByHash error: %s\n", target.Hash().Hex(), err)
+				time.Sleep(3 * time.Second)
+				continue
+			}
+
+			if len(string(tx.Data())) == 0 || string(tx.Data()) == "0x" {
+				continue
+			}
+
+			receipt, err := EthClient.TransactionReceipt(ctx, target.Hash())
+			if err != nil {
+				fmt.Printf("[%s] TransactionReceipt error: %s\n", target.Hash().Hex(), err)
+				time.Sleep(3 * time.Second)
+				continue
+			}
+
+			logStr, _ := json.Marshal(receipt.Logs)
+			if !strings.Contains(strings.ToLower(string(logStr)), "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") {
+				continue
+			}
+
+			comparisonTransaction, err := ConvertToComparisonTransaction(tx)
+			if err != nil {
+				fmt.Printf("[%s] ConvertToComparisonTransaction error: %s\n", target.Hash().Hex(), err)
+				continue
+			}
+			comparisonReceipt, err := ConvertToComparisonReceipt(receipt)
+			if err != nil {
+				fmt.Printf("[%s] ConvertToComparisonReceipt error: %s\n", target.Hash().Hex(), err)
+				continue
+			}
+
+			if comparisonReceipt.Status == FailedStatus {
+				fmt.Printf("[%s] ComparisonReceipt FailedStatus, ignore this one\n", target.Hash().Hex())
+				continue
+			}
+
+			count++
+
+			// 在这里填充一下 block_number，就不需要补全了
+			comparisonTransaction.BlockNumber = comparisonReceipt.BlockNumber
+
+			err = DB.Transaction(func(tx *gorm.DB) error {
+				tx1 := tx.Table("test_comparison_transactions").Create(comparisonTransaction)
+				if tx1.Error != nil || tx1.RowsAffected == 0 {
+					return tx.Error
+				}
+				tx2 := tx.Table("test_comparison_receipts").Create(comparisonReceipt)
+				if tx2.Error != nil || tx2.RowsAffected == 0 {
+					return tx.Error
+				}
+				fmt.Printf("[%s] comparison transaction inserted!\n", target.Hash().Hex())
+				return nil
+			})
+
+			if err != nil {
+				fmt.Printf("[%s] insert comparison transaction into db error: %s\n", target.Hash().Hex(), err)
+				continue
+			}
+		}
+
+		return nil
+	}
+
+	// 遍历所有的block_number
+	for i := 0; i < len(blockNumbers); i++ {
+		bn := blockNumbers[i]
+		if bn <= 47560341 { // 只收集测试集
+			continue
+		}
+		if err := collectOne(bn); err != nil {
+			fmt.Printf("[%d/%d] [%d] collect fail, err: %s\n", i, len(blockNumbers), bn, err)
+			time.Sleep(8 * time.Second)
+			fmt.Printf("sleep 8 second...")
+			i--
+		}
+	}
+}

@@ -3,56 +3,21 @@ package bundlepool
 import (
 	"context"
 	"errors"
-	"fmt"
-	"github.com/coreos/go-systemd/v22/daemon"
-	"github.com/duke-git/lancet/v2/random"
 	"github.com/ethereum/go-ethereum-test/arbi_detector"
-	"github.com/ethereum/go-ethereum-test/portal"
+	"github.com/ethereum/go-ethereum-test/base"
 	"github.com/ethereum/go-ethereum-test/push"
-	"github.com/ethereum/go-ethereum-test/push/define"
-	"github.com/ethereum/go-ethereum-test/relay"
+	"github.com/ethereum/go-ethereum-test/zap_logger"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/ms"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/invalid_tx"
-	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/params"
 	"go.uber.org/zap"
 	"math/big"
 	"strings"
 	"sync"
 	"time"
-)
-
-const (
-	// TODO: decide on a good default value
-	// bundleSlotSize is used to calculate how many data slots a single bundle
-	// takes up based on its size. The slots are used as DoS protection, ensuring
-	// that validating a new bundle remains a constant operation (in reality
-	// O(maxslots), where max slots are 4 currently).
-	bundleSlotSize = 128 * 1024 // 128KB
-
-	maxMinTimestampFromNow = int64(300) // 5 minutes
-)
-
-var (
-	bundleGauge              = metrics.NewRegisteredGauge("bundlepool/bundles", nil)
-	slotsGauge               = metrics.NewRegisteredGauge("bundlepool/slots", nil)
-	resetHeaderGauge         = metrics.NewRegisteredGauge("bundlepool/reset/header", nil)
-	resetHeaderTimeGauge     = metrics.NewRegisteredGauge("bundlepool/reset/header/time", nil)
-	waitingQueueGauge        = metrics.NewRegisteredGauge("bundlepool/waiting/queue", nil)
-	bundleLiveSummaryMetrics = metrics.NewRegisteredTimer("bundlepool/bundle/live/summary", nil)
-	// 2048 大概最近两分钟的交易
-	bundleLiveHistogramMetrics = metrics.GetOrRegisterMyHistogram("bundlepool/bundle/live/histogram", nil, 2048, []float64{3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 60, 120, 240})
-
-	otherTimer                  = metrics.NewRegisteredTimer("bundlepool/bundle/live/summary/other", nil)
-	bundleLiveSummaryMetricsMap = map[string]metrics.Timer{}
 )
 
 var (
@@ -76,379 +41,19 @@ var (
 
 // BlockChain defines the minimal set of methods needed to back a tx pool with
 // a chain. Exists to allow mocking the live chain out of tests.
-type BlockChain interface {
-	// Config retrieves the chain's fork configuration.
-	Config() *params.ChainConfig
-
-	// CurrentBlock returns the current head of the chain.
-	CurrentBlock() *types.Header
-
-	// GetBlock retrieves a specific block, used during pool resets.
-	GetBlock(hash common.Hash, number uint64) *types.Block
-
-	// StateAt returns a state database for a given root hash (generally the head).
-	StateAt(root common.Hash) (*state.StateDB, error)
-}
-
-type BundleSimulator interface {
-	ExecuteBundle(parent *types.Header, bundle *types.Bundle, rpcBribeAddress common.Address) (*big.Int, *define.SseBundleData, error)
-}
-
-// BundleGroup Grouping bundles according to the original transaction
-type BundleGroup struct {
-	Closed        bool
-	CreatedNumber uint64
-	Header        *types.Header
-	Original      *types.Bundle
-	Bundles       map[common.Hash]*types.Bundle // Not contains the original bundle
-	bidServer     *ms.Server
-	rwMtx         sync.RWMutex
-	Slots         uint64
-	pool          *BundlePool
-	builderServer *push.BuilderServer
-	blockchain    *core.BlockChain
-	sseServer     *push.SSEServer
-}
-
-var functionSelectors = map[string]bool{
-	"0x095ea7b3": true, // approve
-	"0xa9059cbb": true, // transfer
-	"0x23b872dd": true, // transferFrom
-	"0xa457c2d7": true, // decreaseAllowance
-	"0x39509351": true, // increaseAllowance
-}
-
-func updateBundleLiveMetrics(arrival time.Time, newHeadTime uint64, rpcId string) {
-	newTime := time.Unix(int64(newHeadTime), 0)
-	d := newTime.Sub(arrival)
-	bundleLiveSummaryMetrics.Update(d)
-	bundleLiveHistogramMetrics.Add(d.Seconds())
-	if v, ok := bundleLiveSummaryMetricsMap[rpcId]; ok {
-		v.Update(d)
-	} else {
-		otherTimer.Update(d)
-	}
-}
-
-func (bg *BundleGroup) SendSseData(sseData *define.SseBundleData, bundle *types.Bundle, header *types.Header) {
-	if len(sseData.SseTxs) == 1 {
-		if len(sseData.SseTxs[0].Logs) == 0 {
-			ethapi.TransactionFilterPureGauge.Inc(1)
-			return
-		}
-		if _, ok := functionSelectors[sseData.SseTxs[0].Selector]; ok {
-			ethapi.TransactionFilterPureGauge.Inc(1)
-			return
-		}
-	}
-
-	// 需要是非公开交易
-	if bundle.Counter == 1 || (bundle.Counter == 0 && !relay.SubServer.IsPublic(bundle.Txs[0].Hash())) {
-		bg.sseServer.Send(sseData)
-	} else {
-		ethapi.TransactionFilterPublicGauge.Inc(1)
-	}
-}
-
-// Len get len
-func (bg *BundleGroup) Len() int64 {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-	return int64(len(bg.Bundles)) + 1
-}
-
-func (bg *BundleGroup) GetBundle(hash common.Hash) *types.Bundle {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-
-	if bg.Closed {
-		return nil
-	}
-
-	if hash == bg.Original.Hash() {
-		return bg.Original
-	}
-	return bg.Bundles[hash]
-}
-
-func (bg *BundleGroup) Exist(hash common.Hash) bool {
-
-	if bg.Closed || bg.GetBundle(hash) == nil {
-		return false
-	}
-
-	return true
-}
-
-func (bg *BundleGroup) GetClosed() bool {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-	return bg.Closed
-}
-
-func (bg *BundleGroup) GetSlots() uint64 {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-	return bg.Slots
-}
-
-// DeleteBundle delete bundle
-func (bg *BundleGroup) DeleteBundle(hash common.Hash) {
-	bg.rwMtx.Lock()
-	defer bg.rwMtx.Unlock()
-
-	bundle, ok := bg.Bundles[hash]
-	if ok {
-		delete(bg.Bundles, hash)
-		bg.Slots -= numSlots(bundle)
-		return
-	}
-	return
-}
-
-func (bg *BundleGroup) SetClosed() {
-	bg.rwMtx.Lock()
-	defer bg.rwMtx.Unlock()
-
-	bg.Closed = true
-}
-
-func (bg *BundleGroup) GetSlot(hash common.Hash) uint64 {
-	return numSlots(bg.GetBundle(hash))
-}
-
-func (bg *BundleGroup) GetOriginal() common.Hash {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-	return bg.Original.Hash()
-}
-
-func (bg *BundleGroup) Reset(header *types.Header) (closed bool, delHash []common.Hash) {
-
-	bg.rwMtx.RLock()
-	if bg.Closed ||
-		bg.blockchain.GetBlockByHash(header.Hash()).Transaction(bg.Original.Txs[0].Hash()) != nil ||
-		bg.Original.MaxBlockNumber <= header.Number.Uint64() {
-		bg.rwMtx.RUnlock()
-		bg.Closed = true
-		return true, nil
-	}
-	bg.rwMtx.RUnlock()
-
-	var delHashMtx sync.Mutex
-	var wg sync.WaitGroup
-
-	var sseData *define.SseBundleData
-
-	bg.rwMtx.Lock()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		price, bd, err := bg.pool.simulator.ExecuteBundle(header, bg.Original, types.BidContractAddress)
-		if err != nil {
-			closed = true
-			return
-		}
-		if bd != nil {
-			bd.ProxyBidContract = types.ProxyContractAddress.Hex()
-			bd.RefundAddress = bg.Original.RefundAddress.Hex()
-			bd.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bg.Original.RefundPercent*1000 + types.RpcBuilderProfitPercent
-			sseData = bd
-		}
-		bg.Original.Price = price
-	}()
-	for hash, bundle := range bg.Bundles {
-		if bundle.MaxBlockNumber <= header.Number.Uint64() {
-			delHashMtx.Lock()
-			delHash = append(delHash, hash)
-			delHashMtx.Unlock()
-			continue
-		}
-		wg.Add(1)
-		go func(hash common.Hash, bundle *types.Bundle) {
-			defer wg.Done()
-			price, _, err := bg.pool.simulator.ExecuteBundle(header, bundle, types.BidContractAddress)
-			if err != nil {
-				delHashMtx.Lock()
-				delHash = append(delHash, hash)
-				delHashMtx.Unlock()
-				return
-			}
-			bundle.Price = price
-
-		}(hash, bundle)
-	}
-	bg.Header = header
-	bg.rwMtx.Unlock()
-
-	wg.Wait()
-
-	if closed {
-		bg.SetClosed()
-		return true, nil
-	}
-
-	bg.bidServer.PushMsgToServer(context.Background(), header)
-
-	if bg.sseServer != nil && sseData != nil && bg.Original.Counter < types.MaxBundleCounter && !bg.Original.IsPrivate() {
-		go bg.SendSseData(sseData, bg.Original, header)
-	}
-
-	return false, delHash
-}
-
-func (bg *BundleGroup) Simulate(bundle *types.Bundle) (*define.SseBundleData, error) {
-
-	bg.rwMtx.RLock()
-	if bg.Closed {
-		bg.rwMtx.RUnlock()
-		return nil, errors.New("bundle group is closed")
-	}
-	bg.rwMtx.RUnlock()
-
-	for {
-		bg.rwMtx.RLock()
-		header := bg.Header
-		bg.rwMtx.RUnlock()
-
-		price, sseBundleData, err := bg.pool.simulator.ExecuteBundle(header, bundle, types.BidContractAddress)
-		if err != nil {
-			return nil, err
-		}
-		bundle.Price = price
-
-		if sseBundleData != nil {
-			sseBundleData.ProxyBidContract = types.ProxyContractAddress.Hex()
-			sseBundleData.RefundAddress = bundle.RefundAddress.Hex()
-			sseBundleData.RefundCfg = types.RpcBribePercent*1000_000 + random.RandInt(0, 9)*100_000 + bundle.RefundPercent*1000 + types.RpcBuilderProfitPercent
-		}
-
-		bg.rwMtx.Lock()
-		if bg.Header == header {
-			if bg.Closed {
-				bg.rwMtx.Unlock()
-				return nil, fmt.Errorf("bundle group is closed")
-			}
-			if !bg.Closed && bundle != bg.Original {
-				if _, exist := bg.Bundles[bundle.Hash()]; exist {
-					bg.rwMtx.Unlock()
-					return nil, ErrBundleAlreadyExist
-				}
-				bg.Bundles[bundle.Hash()] = bundle
-				bg.Slots += numSlots(bundle)
-			}
-			bg.rwMtx.Unlock()
-			return sseBundleData, nil
-		}
-		bg.rwMtx.Unlock()
-	}
-}
-
-func (bg *BundleGroup) GetMaxBundle(header *types.Header) (bundle *types.Bundle) {
-	bg.rwMtx.RLock()
-	defer bg.rwMtx.RUnlock()
-
-	if header.Number.Cmp(bg.Header.Number) != 0 || bg.Original.State != types.BundleOK {
-		return nil
-	}
-
-	maxBundle := bg.Original
-	for _, bd := range bg.Bundles {
-		if bd.State != types.BundleOK {
-			continue
-		}
-		if bd.Price.Cmp(maxBundle.Price) > 0 {
-			maxBundle = bd
-		} else if bd.Price.Cmp(maxBundle.Price) == 0 {
-			if bd.Counter > maxBundle.Counter {
-				maxBundle = bd
-			}
-		}
-	}
-	//if bg.lastMaxBundle != nil && bg.lastMaxBundle == maxBundle {
-	//	return nil
-	//} else {
-	//	bg.lastMaxBundle = maxBundle
-	//}
-
-	return maxBundle
-}
-
-func (bg *BundleGroup) Send(ctx context.Context, msg interface{}, num int) (resp interface{}, err error) {
-	header := msg.(*types.Header)
-
-	if bg.Original.IsPrivate() {
-		bg.builderServer.Send(header, bg.Original, bg.CreatedNumber)
-		return nil, nil
-	}
-
-	blockTime := time.Duration(header.Time * (1e9))
-	now := time.Duration(time.Now().UnixNano())
-	if now-blockTime > 2400*time.Millisecond {
-		// send original bundle immediately
-		bg.builderServer.Send(header, bg.Original, bg.CreatedNumber)
-	}
-
-	times := []struct {
-		timeOut  time.Duration
-		waitTime time.Duration
-	}{
-		{1000 * time.Millisecond, 1000 * time.Millisecond},
-		{2400 * time.Millisecond, 2600 * time.Millisecond}, // global 3 endpoint
-		{2600 * time.Millisecond, 2800 * time.Millisecond}, // for us
-		{2800 * time.Millisecond, 2880 * time.Millisecond}, // for us
-	}
-	try := false
-	for _, t := range times {
-		try = bg.send(header, t.timeOut, t.waitTime)
-		if try {
-			break
-		}
-	}
-
-	return nil, nil
-}
-
-func (bg *BundleGroup) send(header *types.Header, timeOut time.Duration, waitTime time.Duration) bool {
-
-	try := false
-
-	blockTime := time.Duration(header.Time * (1e9))
-	now := time.Duration(time.Now().UnixNano())
-	if blockTime > now {
-		return try
-	}
-
-	longBlock := false
-	if header.Number.Uint64()-bg.CreatedNumber >= 2 {
-		longBlock = true
-	}
-	if now-blockTime < timeOut {
-		if timeOut == 1000*time.Millisecond && !longBlock {
-			return try
-		}
-		time.Sleep(waitTime - (now - blockTime))
-
-		try = true
-		maxBundle := bg.GetMaxBundle(header)
-		if maxBundle == nil {
-			return try
-		}
-		if bg.builderServer != nil {
-			bg.builderServer.Send(header, maxBundle, bg.CreatedNumber)
-		}
-
-		if header.Number.Uint64()-bg.CreatedNumber >= 5 && maxBundle != bg.Original {
-			if bg.builderServer != nil {
-				bg.builderServer.Send(header, bg.Original, bg.CreatedNumber)
-			}
-		}
-		//if longBlock {
-		//	time.Sleep(2998*time.Millisecond - waitTime)
-		//}
-	}
-	return try
-}
+//type BlockChain interface {
+//	// Config retrieves the chain's fork configuration.
+//	Config() *params.ChainConfig
+//
+//	// CurrentBlock returns the current head of the chain.
+//	CurrentBlock() *types.Header
+//
+//	// GetBlock retrieves a specific block, used during pool resets.
+//	GetBlock(hash common.Hash, number uint64) *types.Block
+//
+//	// StateAt returns a state database for a given root hash (generally the head).
+//	StateAt(root common.Hash) (*state.StateDB, error)
+//}
 
 //------------------------------------------------------------------------------------------------------------
 
@@ -457,8 +62,8 @@ type BundlePool struct {
 	bundleGroups map[common.Hash]*BundleGroup // Bundles with the same original transaction are stored in a group
 	mu           sync.RWMutex
 
-	simulator     BundleSimulator
-	blockchain    *core.BlockChain
+	simulator base.BundleSimulator
+	//blockchain    *core.BlockChain
 	sseServer     *push.SSEServer
 	builderServer *push.BuilderServer
 	txQueue       *TxQueue
@@ -466,25 +71,27 @@ type BundlePool struct {
 
 func New(pushServer *push.SSEServer, blockchain *core.BlockChain) *BundlePool {
 	pool := &BundlePool{
-		bundleGroups:  make(map[common.Hash]*BundleGroup),
-		originalSet:   make(map[common.Hash]struct{}),
-		blockchain:    blockchain,
+		bundleGroups: make(map[common.Hash]*BundleGroup),
+		originalSet:  make(map[common.Hash]struct{}),
+		//blockchain:    blockchain,
 		sseServer:     pushServer,
 		builderServer: push.NewBuilderServer(),
 		txQueue:       NewTxQueue(),
 	}
 	pool.builderServer.Start()
 
-	portal.NewSaver().Start()
+	//portal.NewSaver().Start()
 
-	for _, v := range types.RpcIdList {
-		bundleLiveSummaryMetricsMap[v] = metrics.NewRegisteredTimer("bundlepool/bundle/live/summary/"+v, nil)
-	}
+	//for _, v := range types.RpcIdList {
+	//	bundleLiveSummaryMetricsMap[v] = metrics.NewRegisteredTimer("bundlepool/bundle/live/summary/"+v, nil)
+	//}
+
+	pool.SetBundleSimulator(base.NewBundleSimulator())
 
 	return pool
 }
 
-func (p *BundlePool) SetBundleSimulator(simulator BundleSimulator) {
+func (p *BundlePool) SetBundleSimulator(simulator base.BundleSimulator) {
 	p.simulator = simulator
 }
 
@@ -539,7 +146,7 @@ func NonceIsEqual(from0 common.Address, tx0 *types.Transaction, from1 common.Add
 }
 
 // AddBundle adds a mev bundle to the pool
-func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
+func (p *BundlePool) AddBundle(bundle *base.Bundle) error {
 	//if bundle.Counter == 0 {
 	//	if bundleHash, txHash, ok := p.IsCancelTx(bundle.From, bundle.Txs[0]); ok {
 	//
@@ -576,17 +183,18 @@ func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
 	}
 	p.mu.RUnlock()
 
-	header := p.blockchain.CurrentBlock()
+	//header := p.blockchain.CurrentBlock()
+	header := base.CurrentHeader
 	if !ok {
 		group = &BundleGroup{
 			Header:        header,
 			Original:      bundle,
-			Bundles:       make(map[common.Hash]*types.Bundle),
+			Bundles:       make(map[common.Hash]*base.Bundle),
 			Slots:         numSlots(bundle),
 			pool:          p,
 			builderServer: p.builderServer,
-			blockchain:    p.blockchain,
-			sseServer:     p.sseServer,
+			//blockchain:    p.blockchain,
+			sseServer: p.sseServer,
 		}
 		group.CreatedNumber = group.Header.Number.Uint64()
 	} else {
@@ -637,14 +245,15 @@ func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
 	}
 
 	if err != nil {
-		Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
-		Zap.Error("simulate failed", zap.String("bundleHash", bundle.Hash().Hex()), zap.String("err", err.Error()))
+		//zap_logger.Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
+		zap_logger.Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("blockNumber", bundle.MaxBlockNumber), zap.Any("txs", bundle.GetTxHashes()))
+		zap_logger.Zap.Error("simulate failed", zap.String("bundleHash", bundle.Hash().Hex()), zap.String("err", err.Error()))
 		return err
 	}
 
 	if bundle.State == types.BundleNonceTooHigh {
 		// count === 0
-		Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
+		zap_logger.Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
 		p.txQueue.InsertNonceTooHighTxToQueue(bundle.From, bundle)
 		return nil
 	}
@@ -656,7 +265,8 @@ func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
 			bundle.Erc20Tx = true
 		}
 	}
-	Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
+	//zap_logger.Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("bundle", bundle))
+	zap_logger.Zap.Info("Receive Bundle", zap.Any("bundleHash", bundle.Hash()), zap.Any("blockNumber", bundle.MaxBlockNumber), zap.Any("txs", bundle.GetTxHashes()))
 
 	if !ok {
 		// original bundle handle logic,need to start ms server
@@ -686,7 +296,7 @@ func (p *BundlePool) AddBundle(bundle *types.Bundle) error {
 	return nil
 }
 
-func (p *BundlePool) GetBundle(hash common.Hash) *types.Bundle {
+func (p *BundlePool) GetBundle(hash common.Hash) *base.Bundle {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -742,44 +352,41 @@ func (p *BundlePool) Filter(tx *types.Transaction) bool {
 }
 
 func (p *BundlePool) Close() error {
-	Zap.Info("Bundle pool stopped")
+	zap_logger.Zap.Info("Bundle pool stopped")
 	p.builderServer.Stop()
-	portal.BundleSaver.Stop()
+	//portal.BundleSaver.Stop()
 	return nil
 }
 
 func (p *BundlePool) Reset(oldHead, newHead *types.Header) {
-	if oldHead == newHead {
-		return
-	}
-	go func() {
-		var bundleSize int64
-		var bundleSlots int64
-		p.mu.RLock()
-		defer p.mu.RUnlock()
+	//if oldHead == newHead {
+	//	return
+	//}
+	//go func() {
+	//	var bundleSize int64
+	//	var bundleSlots int64
+	//	p.mu.RLock()
+	//	defer p.mu.RUnlock()
+	//
+	//	for k, _ := range p.originalSet {
+	//		if g, ok := p.bundleGroups[k]; ok {
+	//			bundleSize += g.Len()
+	//			bundleSlots += int64(g.GetSlots())
+	//		}
+	//	}
+	//
+	//	bundleGauge.Update(bundleSize)
+	//	slotsGauge.Update(bundleSlots)
+	//}()
 
-		for k, _ := range p.originalSet {
-			if g, ok := p.bundleGroups[k]; ok {
-				bundleSize += g.Len()
-				bundleSlots += int64(g.GetSlots())
-			}
-		}
-
-		bundleGauge.Update(bundleSize)
-		slotsGauge.Update(bundleSlots)
-	}()
-
-	go p.txQueue.CreateBundles(p, newHead)
-	waitingQueueGauge.Update(int64(p.txQueue.queue.Len()))
+	//go p.txQueue.CreateBundles(p, newHead)
 
 	var mtx sync.Mutex
 	var closeHash []common.Hash
 
-	resetHeaderGauge.Update(newHead.Number.Int64())
-	resetHeaderTimeGauge.Update(int64(newHead.Time))
 	common.HeadTime.Store(newHead.Time)
 
-	Zap.Info("Receive New Block", zap.Uint64("number", newHead.Number.Uint64()))
+	zap_logger.Zap.Info("Receive New Block", zap.Uint64("number", newHead.Number.Uint64()))
 
 	var wg sync.WaitGroup
 	p.mu.RLock()
@@ -792,9 +399,9 @@ func (p *BundlePool) Reset(oldHead, newHead *types.Header) {
 			mtx.Lock()
 			if closed {
 				closeHash = append(closeHash, group.GetOriginal())
-				if group.Original.Counter == 0 {
-					invalid_tx.Server.Put(group.Original.Txs[0].Hash())
-				}
+				//if group.Original.Counter == 0 {
+				//	invalid_tx.Server.Put(group.Original.Txs[0].Hash())
+				//}
 			}
 			closeHash = append(closeHash, delHash...)
 			mtx.Unlock()
@@ -808,7 +415,7 @@ func (p *BundlePool) Reset(oldHead, newHead *types.Header) {
 		p.PruneBundle(hash, newHead)
 	}
 
-	go daemon.SdNotify(false, daemon.SdNotifyWatchdog)
+	//go daemon.SdNotify(false, daemon.SdNotifyWatchdog)
 }
 
 // SetGasTip updates the minimum price required by the subpool for a new
@@ -907,16 +514,16 @@ func (p *BundlePool) deleteBundle(hash common.Hash, newHead *types.Header) {
 
 	if group.GetClosed() {
 		if group.Original.Hash() == hash {
-			Zap.Info("Delete Original Bundle", zap.String("hash", hash.Hex()))
+			zap_logger.Zap.Info("Delete Original Bundle", zap.String("hash", hash.Hex()))
 		} else {
-			Zap.Info("由于group需要被释放，Delete Bundle", zap.String("hash", hash.Hex()))
+			zap_logger.Zap.Info("由于group需要被释放，Delete Bundle", zap.String("hash", hash.Hex()))
 		}
 		delete(p.originalSet, group.Original.Hash())
 
 		delete(p.bundleGroups, group.Original.Hash()) // 删除原始的
-		if newHead != nil {                           // 取消交易不进行记录
-			go updateBundleLiveMetrics(group.Original.ArrivalTime, newHead.Time, group.Original.RPCID)
-		}
+		//if newHead != nil {                           // 取消交易不进行记录
+		//	go updateBundleLiveMetrics(group.Original.ArrivalTime, newHead.Time, group.Original.RPCID)
+		//}
 		for key, _ := range group.Bundles {
 			delete(p.bundleGroups, key)
 		}
@@ -924,10 +531,19 @@ func (p *BundlePool) deleteBundle(hash common.Hash, newHead *types.Header) {
 		go group.bidServer.Stop()
 
 	} else {
-		Zap.Info("Delete Bundle", zap.String("hash", hash.Hex()))
+		zap_logger.Zap.Info("Delete Bundle", zap.String("hash", hash.Hex()))
 
 		group.DeleteBundle(hash)
 		delete(p.bundleGroups, hash)
+	}
+}
+
+func (p *BundlePool) PrintState() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		zap_logger.Zap.Info("[pool-state]", zap.Any("group", len(p.originalSet)), zap.Any("bundles", len(p.bundleGroups)))
 	}
 }
 
@@ -946,7 +562,7 @@ func (p *BundlePool) deleteBundle(hash common.Hash, newHead *types.Header) {
 // =====================================================================================================================
 
 // numSlots calculates the number of slots needed for a single bundle.
-func numSlots(bundle *types.Bundle) uint64 {
+func numSlots(bundle *base.Bundle) uint64 {
 	//return (bundle.Size() + bundleSlotSize - 1) / bundleSlotSize
 	if bundle == nil {
 		return 0
@@ -956,7 +572,7 @@ func numSlots(bundle *types.Bundle) uint64 {
 
 // =====================================================================================================================
 
-type BundleHeap []*types.Bundle
+type BundleHeap []*base.Bundle
 
 func (h *BundleHeap) Len() int { return len(*h) }
 
@@ -967,7 +583,7 @@ func (h *BundleHeap) Less(i, j int) bool {
 func (h *BundleHeap) Swap(i, j int) { (*h)[i], (*h)[j] = (*h)[j], (*h)[i] }
 
 func (h *BundleHeap) Push(x interface{}) {
-	*h = append(*h, x.(*types.Bundle))
+	*h = append(*h, x.(*base.Bundle))
 }
 
 func (h *BundleHeap) Pop() interface{} {

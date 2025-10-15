@@ -20,15 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum-test/internal/ethapi"
-	limitip "github.com/ethereum/go-ethereum/common/limit"
-	"github.com/ethereum/go-ethereum/invalid_tx"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/portal"
-	"github.com/ethereum/go-ethereum/relay"
+	"github.com/ethereum/go-ethereum-test/base"
+	"github.com/ethereum/go-ethereum-test/bundlepool"
 	"github.com/spf13/cast"
 	"math/big"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -37,57 +32,96 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	portalRpc "github.com/ethereum/go-ethereum/portal/zrpc_client/typed/rpc_portal/rpcv2"
 )
 
-var (
-	TransactionFilterPublicGauge = metrics.NewRegisteredGauge("transaction/filter/public", nil)
-	TransactionFilterPureGauge   = metrics.NewRegisteredGauge("transaction/filter/pure", nil)
-)
+type API struct {
+	pool *bundlepool.BundlePool
+}
 
-// TransactionAPI exposes methods for reading and creating transaction data.
-type TransactionAPI struct {
-	b         ethapi.Backend
-	nonceLock *ethapi.AddrLocker
-	signer    types.Signer
+func NewAPI(pool *bundlepool.BundlePool) *API {
+	return &API{
+		pool: pool,
+	}
+}
+
+type SendRawTransactionArgs struct {
+	Input          hexutil.Bytes
+	MaxBlockNumber uint64
+}
+
+type SendRawTransactionResponse struct {
+	TxHash common.Hash `json:"txHash"`
+}
+
+var EmptyRawResponse = SendRawTransactionResponse{
+	TxHash: common.Hash{},
+}
+
+type ResetHeaderArgs struct {
+	HeaderNumber uint64
+	Time         uint64
+}
+
+type ResetHeaderResponse struct {
+	HeaderNumber uint64 `json:"headerNumber"`
+}
+
+// ResetHeader 客户端定时调用即可
+func (a *API) ResetHeader(ctx context.Context, args ResetHeaderArgs) (ResetHeaderResponse, error) {
+	curr := &types.Header{
+		Number: big.NewInt(int64(args.HeaderNumber)),
+		Time:   args.Time,
+	}
+	base.CurrentHeader = curr
+	a.pool.Reset(nil, curr)
+	return ResetHeaderResponse{
+		HeaderNumber: args.HeaderNumber,
+	}, nil
+}
+
+// SendRawTransaction will add the signed transaction to the transaction pool.
+// The sender is responsible for signing the transaction and using the correct nonce.
+func (a *API) SendRawTransaction(ctx context.Context, input SendRawTransactionArgs) (SendRawTransactionResponse, error) {
+	tx := new(types.Transaction)
+	if err := tx.UnmarshalBinary(input.Input); err != nil {
+		return EmptyRawResponse, err
+	}
+	return SubmitTransaction(ctx, a, tx, input.MaxBlockNumber)
 }
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
-func SubmitTransaction(ctx context.Context, b ethapi.Backend, tx *types.Transaction) (common.Hash, error) {
-	remoteAddr := ctx.Value("remote").(string)
-	split := strings.Split(remoteAddr, ":")
-	if len(split) == 2 {
-		limiter := limitip.GetLimiter(split[0])
-		if !limiter.Allow() {
-			return common.Hash{}, newBundleError(errors.New("too many requests"))
-		}
-	}
+func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBlockNumber uint64) (SendRawTransactionResponse, error) {
+	//remoteAddr := ctx.Value("remote").(string)
+	//split := strings.Split(remoteAddr, ":")
+	//if len(split) == 2 {
+	//	limiter := limitip.GetLimiter(split[0])
+	//	if !limiter.Allow() {
+	//		return EmptyRawResponse, newBundleError(errors.New("too many requests"))
+	//	}
+	//}
 
-	if relay.SubServer.IsPublic(tx.Hash()) {
-		TransactionFilterPublicGauge.Inc(1)
-		return tx.Hash(), nil
-	}
+	//if relay.SubServer.IsPublic(tx.Hash()) {
+	//	TransactionFilterPublicGauge.Inc(1)
+	//	return SendRawTransactionResponse{
+	//		TxHash: tx.Hash(),
+	//	}, nil
+	//}
 	// If the transaction fee cap is already specified, ensure the
 	// fee of the given transaction is _reasonable_.
-	if err := checkTxFee(tx.GasPrice(), tx.Gas(), b.RPCTxFeeCap()); err != nil {
-		return common.Hash{}, err
+	if err := checkTxFee(tx.GasPrice(), tx.Gas(), 0); err != nil {
+		return EmptyRawResponse, err
 	}
 
-	if !b.UnprotectedAllowed() && !tx.Protected() {
-		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
-		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
-	}
-	head := b.CurrentBlock()
-	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
+	signer := types.LatestSignerForChainID(big.NewInt(56))
 	from, err := types.Sender(signer, tx)
 	if err != nil {
-		return common.Hash{}, err
+		return EmptyRawResponse, err
 	}
 
-	bundle := &types.Bundle{
+	bundle := &base.Bundle{
 		ParentHash:        common.Hash{},
 		Txs:               []*types.Transaction{tx},
-		MaxBlockNumber:    head.Number.Uint64() + 100,
+		MaxBlockNumber:    maxBlockNumber,
 		RevertingTxHashes: nil,
 		Counter:           0,
 		RefundAddress:     from,
@@ -96,100 +130,111 @@ func SubmitTransaction(ctx context.Context, b ethapi.Backend, tx *types.Transact
 		From:              from,
 		PrivacyPeriod:     0,
 		PrivacyBuilder:    []string{"blockrazor"},
-		BroadcastBuilder:  []string{"blockrazor", "48club", "bloxroute"},
+		BroadcastBuilder:  []string{"blockrazor", "48club", "bloxroute", "smith"},
 		ArrivalTime:       time.Now(),
 	}
 
-	path := ctx.Value("URL").(string)
-	host := ctx.Value("Host").(string)
-	hostSlice := strings.Split(host, ".")
-	if len(hostSlice) > 4 || len(hostSlice) < 3 {
-		return common.Hash{}, errors.New("invalid host")
-	}
-	var userInfo *portalRpc.GetAllRpcInfoResponse
-	if len(hostSlice) > 3 {
-		userInfo = portal.UserServer.GetAllRpcInfoList(hostSlice[0])
-	}
-	if userInfo == nil {
-		if path == "/fullprivacy" {
-			bundle.RPCID = "fullprivacy"
-		} else if path == "/maxbackrun" {
-			bundle.Hint[types.HintHash] = true
-			bundle.Hint[types.HintTo] = true
-			bundle.Hint[types.HintCallData] = true
-			bundle.Hint[types.HintFunctionSelector] = true
-			bundle.Hint[types.HintLogs] = true
-			bundle.RPCID = "maxbackrun"
-		} else if len(path) > 15 {
-			split := strings.Split(path, "/")
-			userInfo = portal.UserServer.GetAllRpcInfoList(split[len(split)-1])
-			if userInfo == nil {
-				bundle.Hint[types.HintHash] = true
-				bundle.Hint[types.HintLogs] = true
-				bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-				bundle.RPCID = "default"
-			}
-		} else {
-			bundle.Hint[types.HintHash] = true
-			bundle.Hint[types.HintLogs] = true
-			bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-			bundle.RPCID = "default"
-		}
-	}
-	if userInfo == nil {
-		userInfo = portal.UserServer.GetAllRpcInfoList(bundle.RPCID)
-	}
+	//path := ctx.Value("URL").(string)
+	//host := ctx.Value("Host").(string)
+	//hostSlice := strings.Split(host, ".")
+	//if len(hostSlice) > 4 || len(hostSlice) < 3 {
+	//	return EmptyRawResponse, errors.New("invalid host")
+	//}
+	//var userInfo *portalRpc.GetAllRpcInfoResponse
+	//if len(hostSlice) > 3 {
+	//	userInfo = portal.UserServer.GetAllRpcInfoList(hostSlice[0])
+	//}
+	//if userInfo == nil {
+	//	if path == "/fullprivacy" {
+	//		bundle.RPCID = "fullprivacy"
+	//	} else if path == "/maxbackrun" {
+	//		bundle.Hint[types.HintHash] = true
+	//		bundle.Hint[types.HintTo] = true
+	//		bundle.Hint[types.HintCallData] = true
+	//		bundle.Hint[types.HintFunctionSelector] = true
+	//		bundle.Hint[types.HintLogs] = true
+	//		bundle.RPCID = "maxbackrun"
+	//	} else if len(path) > 15 {
+	//		split := strings.Split(path, "/")
+	//		userInfo = portal.UserServer.GetAllRpcInfoList(split[len(split)-1])
+	//		if userInfo == nil {
+	//			bundle.Hint[types.HintHash] = true
+	//			bundle.Hint[types.HintLogs] = true
+	//			bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
+	//			bundle.RPCID = "default"
+	//		}
+	//	} else {
+	//		bundle.Hint[types.HintHash] = true
+	//		bundle.Hint[types.HintLogs] = true
+	//		bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
+	//		bundle.RPCID = "default"
+	//	}
+	//}
+	//if userInfo == nil {
+	//	userInfo = portal.UserServer.GetAllRpcInfoList(bundle.RPCID)
+	//}
 
-	if userInfo != nil {
-		bundle.RPCID = userInfo.RpcId
-		bundle.Hint[types.HintHash] = userInfo.HintHash
-		bundle.Hint[types.HintFrom] = userInfo.HintFrom
-		bundle.Hint[types.HintTo] = userInfo.HintTo
-		bundle.Hint[types.HintValue] = userInfo.HintValue
-		bundle.Hint[types.HintNonce] = userInfo.HintNonce
-		bundle.Hint[types.HintCallData] = userInfo.HintCalldata
-		bundle.Hint[types.HintFunctionSelector] = userInfo.HintFunctionSelector
-		bundle.Hint[types.HintGasLimit] = userInfo.HintGasLimit
-		bundle.Hint[types.HintGasPrice] = userInfo.HintGasPrice
-		bundle.Hint[types.HintLogs] = userInfo.HintLogs
-		bundle.PrivacyPeriod = userInfo.PrivacyPeriod
-		bundle.PrivacyBuilder = userInfo.PrivacyBuilder
-		bundle.BroadcastBuilder = userInfo.BroadcastBuilder
+	bundle.Hint[types.HintHash] = true
+	bundle.Hint[types.HintTo] = true
+	bundle.Hint[types.HintFrom] = true
+	bundle.Hint[types.HintCallData] = true
+	bundle.Hint[types.HintFunctionSelector] = true
+	bundle.Hint[types.HintLogs] = true
+	bundle.Hint[types.HintValue] = true
+	bundle.Hint[types.HintGasLimit] = true
+	bundle.Hint[types.HintGasPrice] = true
+	bundle.RPCID = "maxbackrun"
 
-		if userInfo.RefundPercent >= 1 && userInfo.RefundPercent <= 99 {
-			bundle.RefundPercent = int(userInfo.RefundPercent)
-		}
-		if userInfo.RefundRecipient != "" && userInfo.RefundRecipient != "tx.origin" {
-			bundle.RefundAddress = common.HexToAddress(userInfo.RefundRecipient)
-		}
-
-		if !userInfo.IsProtected {
-			bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-		}
-	}
+	//if userInfo != nil {
+	//	bundle.RPCID = userInfo.RpcId
+	//	bundle.Hint[types.HintHash] = userInfo.HintHash
+	//	bundle.Hint[types.HintFrom] = userInfo.HintFrom
+	//	bundle.Hint[types.HintTo] = userInfo.HintTo
+	//	bundle.Hint[types.HintValue] = userInfo.HintValue
+	//	bundle.Hint[types.HintNonce] = userInfo.HintNonce
+	//	bundle.Hint[types.HintCallData] = userInfo.HintCalldata
+	//	bundle.Hint[types.HintFunctionSelector] = userInfo.HintFunctionSelector
+	//	bundle.Hint[types.HintGasLimit] = userInfo.HintGasLimit
+	//	bundle.Hint[types.HintGasPrice] = userInfo.HintGasPrice
+	//	bundle.Hint[types.HintLogs] = userInfo.HintLogs
+	//	bundle.PrivacyPeriod = userInfo.PrivacyPeriod
+	//	bundle.PrivacyBuilder = userInfo.PrivacyBuilder
+	//	bundle.BroadcastBuilder = userInfo.BroadcastBuilder
+	//
+	//	if userInfo.RefundPercent >= 1 && userInfo.RefundPercent <= 99 {
+	//		bundle.RefundPercent = int(userInfo.RefundPercent)
+	//	}
+	//	if userInfo.RefundRecipient != "" && userInfo.RefundRecipient != "tx.origin" {
+	//		bundle.RefundAddress = common.HexToAddress(userInfo.RefundRecipient)
+	//	}
+	//
+	//	if !userInfo.IsProtected {
+	//		bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
+	//	}
+	//}
 
 	if ctx.Value("RefundPercent") != nil {
 		p := cast.ToInt(ctx.Value("RefundPercent"))
 		if p >= 1 && p <= 99 {
 			bundle.RefundPercent = p
 		} else {
-			return common.Hash{}, errors.New("the RefundPercent in url is illegal")
+			return EmptyRawResponse, errors.New("the RefundPercent in url is illegal")
 		}
 	}
 
-	// every transaction must have tx tip
-	tip, err := tx.EffectiveGasTip(head.BaseFee)
+	//every transaction must have tx tip
+	tip, err := tx.EffectiveGasTip(big.NewInt(0))
 	if err != nil {
-		return common.Hash{}, err
+		return EmptyRawResponse, err
 	}
 	if tip.Uint64() < params.GWei {
-		return common.Hash{}, errors.New("the gas tip fee of transaction must be greater than or equal to 1gwei")
+		return EmptyRawResponse, errors.New("the gas tip fee of transaction must be greater than or equal to 1gwei")
 	}
 
-	invalid_tx.Server.Delete(tx.Hash())
+	//invalid_tx.Server.Delete(tx.Hash())
 
-	if err := b.SendBundle(ctx, bundle); err != nil {
-		return common.Hash{}, err
+	if err := a.pool.AddBundle(bundle); err != nil {
+		return EmptyRawResponse, err
 	}
 	// Print a log with full tx details for manual investigations and interventions
 	xForward := ctx.Value("X-Forwarded-For")
@@ -200,17 +245,9 @@ func SubmitTransaction(ctx context.Context, b ethapi.Backend, tx *types.Transact
 	} else {
 		log.Info("Submitted transaction", "hash", tx.Hash().Hex(), "from", from, "nonce", tx.Nonce(), "recipient", tx.To(), "value", tx.Value(), "x-forward-ip", xForward)
 	}
-	return tx.Hash(), nil
-}
-
-// SendRawTransaction will add the signed transaction to the transaction pool.
-// The sender is responsible for signing the transaction and using the correct nonce.
-func (s *TransactionAPI) SendRawTransaction(ctx context.Context, input hexutil.Bytes) (common.Hash, error) {
-	tx := new(types.Transaction)
-	if err := tx.UnmarshalBinary(input); err != nil {
-		return common.Hash{}, err
-	}
-	return SubmitTransaction(ctx, s.b, tx)
+	return SendRawTransactionResponse{
+		TxHash: tx.Hash(),
+	}, nil
 }
 
 // checkTxFee is an internal function used to check whether the fee of

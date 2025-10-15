@@ -1,6 +1,8 @@
 package bundlepool
 
 import (
+	"github.com/ethereum/go-ethereum-test/base"
+	"github.com/ethereum/go-ethereum-test/zap_logger"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	. "github.com/ethereum/go-ethereum/log/zap"
@@ -14,24 +16,24 @@ var QueueCount = 1000
 var queueSize = 50
 
 type TxQueue struct {
-	queue    *lru.Cache[common.Address, []*types.Bundle]
+	queue    *lru.Cache[common.Address, []*base.Bundle]
 	queueMtx sync.Mutex
 }
 
 func NewTxQueue() *TxQueue {
 	t := &TxQueue{}
-	t.queue, _ = lru.New[common.Address, []*types.Bundle](QueueCount)
+	t.queue, _ = lru.New[common.Address, []*base.Bundle](QueueCount)
 	return t
 }
 
 // InsertNonceTooHighTxToQueue must insert count == 0's bundle
-func (txQueue *TxQueue) InsertNonceTooHighTxToQueue(from common.Address, bundle *types.Bundle) {
+func (txQueue *TxQueue) InsertNonceTooHighTxToQueue(from common.Address, bundle *base.Bundle) {
 	txQueue.queueMtx.Lock()
 	defer txQueue.queueMtx.Unlock()
 
 	list, exist := txQueue.queue.Get(from)
 	if exist {
-		i, b := slices.BinarySearchFunc(list, bundle, func(bundle1 *types.Bundle, bundle2 *types.Bundle) int {
+		i, b := slices.BinarySearchFunc(list, bundle, func(bundle1 *base.Bundle, bundle2 *base.Bundle) int {
 			return int(bundle1.Txs[0].Nonce() - bundle2.Txs[0].Nonce())
 		})
 		if b {
@@ -45,25 +47,25 @@ func (txQueue *TxQueue) InsertNonceTooHighTxToQueue(from common.Address, bundle 
 			}
 		}
 	} else {
-		txQueue.queue.Add(from, []*types.Bundle{bundle})
+		txQueue.queue.Add(from, []*base.Bundle{bundle})
 	}
 
-	Zap.Info("Insert NonceTooHighTx To Queue", zap.String("from", from.Hex()), zap.String("bundleHash", bundle.Hash().Hex()))
+	zap_logger.Zap.Info("Insert NonceTooHighTx To Queue", zap.String("from", from.Hex()), zap.String("bundleHash", bundle.Hash().Hex()))
 }
 
-func (txQueue *TxQueue) TakeBundles(from common.Address) []*types.Bundle {
+func (txQueue *TxQueue) TakeBundles(from common.Address) []*base.Bundle {
 	txQueue.queueMtx.Lock()
 	defer txQueue.queueMtx.Unlock()
 
 	list, ok := txQueue.queue.Get(from)
 	if ok {
-		return append([]*types.Bundle{}, list...)
+		return append([]*base.Bundle{}, list...)
 	}
 	return nil
 }
 
 // DeleteBundle delete one bundle which bundle's nonce == nonce
-func (txQueue *TxQueue) DeleteBundle(from common.Address, nonce uint64) *types.Bundle {
+func (txQueue *TxQueue) DeleteBundle(from common.Address, nonce uint64) *base.Bundle {
 	txQueue.queueMtx.Lock()
 	defer txQueue.queueMtx.Unlock()
 	list, ok := txQueue.queue.Get(from)
@@ -127,7 +129,7 @@ func (txQueue *TxQueue) CreateBundles(p *BundlePool, header *types.Header) {
 
 	for _, from := range txQueue.queue.Keys() {
 		v, _ := txQueue.queue.Get(from)
-		bundles := append([]*types.Bundle{}, v...)
+		bundles := append([]*base.Bundle{}, v...)
 		go func() {
 			for _, bundle := range bundles {
 				if header.Number.Uint64() >= bundle.MaxBlockNumber {

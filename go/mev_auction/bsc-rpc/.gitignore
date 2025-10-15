@@ -59,3 +59,4 @@ cmd/geth/geth
 /bundlepool/log/
 /push/log/
 /validator/log/
+log/

@@ -2,19 +2,18 @@ package push
 
 import (
 	"context"
+	"github.com/ethereum/go-ethereum-test/base"
+	"github.com/ethereum/go-ethereum-test/push/blockrazor"
+	"github.com/ethereum/go-ethereum-test/push/bloxroute"
+	"github.com/ethereum/go-ethereum-test/push/club48"
+	"github.com/ethereum/go-ethereum-test/push/define"
+	"github.com/ethereum/go-ethereum-test/push/nodereal"
+	"github.com/ethereum/go-ethereum-test/push/smith"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/ms"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/portal"
-	"github.com/ethereum/go-ethereum/push/blockrazor"
-	"github.com/ethereum/go-ethereum/push/bloxroute"
-	"github.com/ethereum/go-ethereum/push/club48"
-	"github.com/ethereum/go-ethereum/push/define"
-	"github.com/ethereum/go-ethereum/push/nodereal"
-	"github.com/ethereum/go-ethereum/push/smith"
 	"go.uber.org/zap"
 	"strings"
 	"time"
@@ -48,12 +47,12 @@ func NewBuilderServer() *BuilderServer {
 		s, _ := ms.NewSvr(name, func(ctx context.Context, msg interface{}, num int) (interface{}, error) {
 			builderParam := msg.(*define.BuilderParam)
 
-			if (name == "blockrazor" && builderParam.Counter == 0) || (name == "48club" && builderParam.Counter == 0) {
-				go builer.SendRawPrivateTransaction(builderParam.Param.Txs[0], builderParam.BundleHash)
-			}
-			if (name != "blockrazor") || (name == "blockrazor" && builderParam.Counter != 0) {
-				go builer.SendBundle(*builderParam.Param, builderParam.BundleHash)
-			}
+			//if (name == "blockrazor" && builderParam.Counter == 0) || (name == "48club" && builderParam.Counter == 0) {
+			//	go builer.SendRawPrivateTransaction(builderParam.Param.Txs[0], builderParam.BundleHash)
+			//}
+			//if (name != "blockrazor") || (name == "blockrazor" && builderParam.Counter != 0) {
+			go builer.SendBundle(*builderParam.Param, builderParam.BundleHash)
+			//}
 			return nil, nil
 		}, nil)
 		s.ActionGoroutineNum = 5
@@ -76,8 +75,8 @@ func (bs *BuilderServer) Stop() {
 }
 
 // Send header为当前已出的最新块
-func (bs *BuilderServer) Send(header *types.Header, bundle *types.Bundle, createNumber uint64) {
-	builderParam, portalBundleData := bundle.GenBuilderReq(header)
+func (bs *BuilderServer) Send(header *types.Header, bundle *base.Bundle, createNumber uint64) {
+	builderParam, _ := bundle.GenBuilderReq(header)
 
 	//validatorNextIs48 := validator.Server.NextBlockIs48Club(header.Number.Int64())
 	//validatorAfterNextIs48 := validator.Server.NextBlockIs48Club(header.Number.Int64() + 1) // the block after next is club48.
@@ -91,11 +90,11 @@ func (bs *BuilderServer) Send(header *types.Header, bundle *types.Bundle, create
 		builderList = bundle.BroadcastBuilder
 	}
 
-	if header.Number.Uint64()-createNumber >= uint64(bundle.PrivacyPeriod) && bundle.Erc20Tx {
-		for _, addr := range PublicNodes {
-			go sendToPublicNode(bundle, addr)
-		}
-	}
+	//if header.Number.Uint64()-createNumber >= uint64(bundle.PrivacyPeriod) && bundle.Erc20Tx {
+	//	for _, addr := range PublicNodes {
+	//		go sendToPublicNode(bundle, addr)
+	//	}
+	//}
 
 	for _, builder := range builderList {
 		builder = strings.ToLower(builder)
@@ -116,13 +115,13 @@ func (bs *BuilderServer) Send(header *types.Header, bundle *types.Bundle, create
 	}
 
 	// send portal data to portal
-	if portalBundleData != nil {
-		//fmt.Println("called portal.BundleSaver.Send")
-		portal.BundleSaver.Send(portalBundleData)
-	}
+	//if portalBundleData != nil {
+	//	//fmt.Println("called portal.BundleSaver.Send")
+	//	portal.BundleSaver.Send(portalBundleData)
+	//}
 }
 
-func sendToPublicNode(bundle *types.Bundle, addr string) {
+func sendToPublicNode(bundle *base.Bundle, addr string) {
 	dial, err := ethclient.Dial(addr)
 	if err != nil {
 		return
@@ -130,8 +129,8 @@ func sendToPublicNode(bundle *types.Bundle, addr string) {
 	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 	err = dial.SendTransaction(ctx, bundle.Txs[0])
 	if err != nil {
-		Zap.Error("failed to send raw tx: ", zap.Any("err", err.Error()), zap.Any("addr", addr))
+		log.Error("failed to send raw tx: ", zap.Any("err", err.Error()), zap.Any("addr", addr))
 	} else {
-		Zap.Info("send raw tx to public node, tx hash is ", zap.Any("bundleHash", bundle.Hash()), zap.Any("addr", addr))
+		log.Info("send raw tx to public node, tx hash is ", zap.Any("bundleHash", bundle.Hash()), zap.Any("addr", addr))
 	}
 }

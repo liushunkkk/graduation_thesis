@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/flashbots/go-utils/cli"
 	"github.com/flashbots/mev-share-node/jsonrpcserver"
 	"github.com/flashbots/mev-share-node/mevshare"
@@ -119,12 +119,6 @@ func main() {
 		logger.Fatal("Failed to load builders config", zap.Error(err))
 	}
 
-	// eth 客户端，可以向别的节点发 rpc 请求
-	ethBackend, err := ethclient.Dial(*ethPtr)
-	if err != nil {
-		logger.Fatal("Failed to connect to ethBackend endpoint", zap.Error(err))
-	}
-
 	// bundle 模拟执行的api
 	shareGasUsed := *shareGasUsedPtr == "1"
 	shareMevGasPrice := *shareMevGasPricePtr == "1"
@@ -151,12 +145,7 @@ func main() {
 	// 启动队列的循环处理
 	queueWg := simQueue.Start(ctx)
 
-	// chain id
-	chainID, err := ethBackend.ChainID(ctx)
-	if err != nil {
-		logger.Fatal("Failed to get chain id", zap.Error(err))
-	}
-	signer := types.LatestSignerForChainID(chainID)
+	signer := types.LatestSignerForChainID(big.NewInt(56))
 
 	rateLimit, err := strconv.ParseFloat(*meVSimBundleRateLimitPtr, 64)
 	if err != nil {

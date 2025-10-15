@@ -8,14 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum-test/push/define"
+	"github.com/ethereum/go-ethereum-test/zap_logger"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/push/define"
 	"github.com/golang/glog"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
@@ -79,7 +79,11 @@ func (club48 *Club48) SendBundle(param define.Param, hash common.Hash) {
 	bd.Params = []define.Param{param}
 
 	data, _ := json.Marshal(bd)
-	Zap.Info("club48 send", zap.Any("hash", hash), zap.Any("req", bd))
+
+	cost := time.Now().Sub(param.ArrivalTime).Microseconds()
+	zap_logger.Zap.Info("[club48-send]", zap.Any("hash", hash), zap.Any("cost", cost), zap.Any("txs", len(param.Txs)))
+	time.Sleep(20 * time.Millisecond)
+	return
 
 	client := &http.Client{
 		Timeout: 3 * time.Second,
@@ -104,14 +108,14 @@ func (club48 *Club48) SendBundle(param define.Param, hash common.Hash) {
 		log.Error("receive club48 builder resp body error:", err)
 		return
 	}
-	Zap.Info(fmt.Sprintf("club48 builder resp[%v]:%s", hash, string(body)))
+	zap_logger.Zap.Info(fmt.Sprintf("club48 builder resp[%v]:%s", hash, string(body)))
 }
 
 func (club48 *Club48) SendRawPrivateTransaction(tx string, bundleHash common.Hash) {
 	if _, ok := cache.Get(bundleHash.String()); ok {
 		return
 	}
-	Zap.Info(" club48 send private tx:", zap.Any("bundleHash", bundleHash), zap.Any("tx", tx))
+	zap_logger.Zap.Info(" club48 send private tx:", zap.Any("bundleHash", bundleHash), zap.Any("tx", tx))
 
 	sign48SPMember, err := Sign48SPMember(decrypted, []string{tx})
 	if err != nil {
@@ -151,7 +155,7 @@ func (club48 *Club48) SendRawPrivateTransaction(tx string, bundleHash common.Has
 		log.Error("receive builder club48 private tx resp body error:", err)
 		return
 	}
-	Zap.Info(fmt.Sprintf("club48 builder private tx resp[%v]:%s", bundleHash, string(body)))
+	zap_logger.Zap.Info(fmt.Sprintf("club48 builder private tx resp[%v]:%s", bundleHash, string(body)))
 
 	cache.Add(bundleHash.String(), struct{}{})
 }

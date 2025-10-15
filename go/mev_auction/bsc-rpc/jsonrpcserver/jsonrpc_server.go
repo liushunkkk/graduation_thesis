@@ -10,9 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -125,23 +122,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	highPriority := r.Header.Get("high_prio") == "true"
-	ctx := context.WithValue(r.Context(), highPriorityKey{}, highPriority)
-
-	signature := r.Header.Get("x-flashbots-signature")
-	if split := strings.Split(signature, ":"); len(split) > 0 {
-		signer := common.HexToAddress(split[0])
-		ctx = context.WithValue(ctx, signerKey{}, signer)
-	}
-
-	origin := r.Header.Get("x-flashbots-origin")
-	if origin != "" {
-		if len(origin) > maxOriginIDLength {
-			writeJSONRPCError(w, req.ID, CodeInvalidRequest, "x-flashbots-origin header is too long")
-			return
-		}
-		ctx = context.WithValue(ctx, originKey{}, origin)
-	}
+	ctx := context.Background()
 
 	// get method
 	method, ok := h.methods[req.Method]
@@ -175,28 +156,4 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-}
-
-func GetPriority(ctx context.Context) bool {
-	value, ok := ctx.Value(highPriorityKey{}).(bool)
-	if !ok {
-		return false
-	}
-	return value
-}
-
-func GetSigner(ctx context.Context) common.Address {
-	value, ok := ctx.Value(signerKey{}).(common.Address)
-	if !ok {
-		return common.Address{}
-	}
-	return value
-}
-
-func GetOrigin(ctx context.Context) string {
-	value, ok := ctx.Value(originKey{}).(string)
-	if !ok {
-		return ""
-	}
-	return value
 }

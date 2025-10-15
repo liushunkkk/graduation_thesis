@@ -20,6 +20,7 @@ type Param struct {
 	MaxTimestamp       uint64        `json:"maxTimestamp"`
 	RevertingTxHashes  []string      `json:"revertingTxHashes"`
 	SoulPointSignature hexutil.Bytes `json:"48spSign,omitempty"` // <<<<<<------ This is the 48SP signature
+	ArrivalTime        time.Time     `json:"arrivalTime,omitempty"`
 }
 
 // SseBundleData SSE

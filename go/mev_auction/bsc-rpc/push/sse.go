@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/duke-git/lancet/v2/random"
+	"github.com/ethereum/go-ethereum-test/push/define"
+	"github.com/ethereum/go-ethereum-test/zap_logger"
 	"github.com/ethereum/go-ethereum/common/ms"
-	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/portal"
-	"github.com/ethereum/go-ethereum/push/define"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
@@ -72,24 +71,24 @@ func (p *SSEServer) Send(data *define.SseBundleData) {
 
 func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 启动时间检查
-	enforceTokenStartTime := time.Date(2024, 12, 11, 0, 0, 0, 0, time.UTC)
-	authToken := p.extractToken(r.Header.Get("Authorization"))
-	if authToken == "" {
-		authToken = r.URL.Query().Get("token")
-	}
+	//enforceTokenStartTime := time.Date(2024, 12, 11, 0, 0, 0, 0, time.UTC)
+	//authToken := p.extractToken(r.Header.Get("Authorization"))
+	//if authToken == "" {
+	//	authToken = r.URL.Query().Get("token")
+	//}
 
-	if time.Now().After(enforceTokenStartTime) {
-		if authToken == "" {
-			http.Error(w, "Auth token is missing", http.StatusUnauthorized)
-			return
-		}
-
-		if !p.validateToken(authToken) {
-			http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
-			return
-		}
-		Zap.Info("authToken is valid", zap.String("token", authToken))
-	}
+	//if time.Now().After(enforceTokenStartTime) {
+	//	if authToken == "" {
+	//		http.Error(w, "Auth token is missing", http.StatusUnauthorized)
+	//		return
+	//	}
+	//
+	//	if !p.validateToken(authToken) {
+	//		http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
+	//		return
+	//	}
+	//	zap_logger.Zap.Info("authToken is valid", zap.String("token", authToken))
+	//}
 
 	var host string
 	forwarded := r.Header.Get("X-Forwarded-For")
@@ -111,7 +110,7 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.clients[host] >= p.IPLimitCount {
 		p.clientsMtx.Unlock()
 		http.Error(w, fmt.Sprintf("The number of connections for the same ip access has reached %d", p.IPLimitCount), http.StatusTooManyRequests)
-		Zap.Info("Connections for the same ip access has reached limit", zap.String("host", host), zap.Any("limit", p.IPLimitCount))
+		zap_logger.Zap.Info("Connections for the same ip access has reached limit", zap.String("host", host), zap.Any("limit", p.IPLimitCount))
 		return
 	}
 	p.clients[host]++
@@ -143,10 +142,11 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sub := p.Subscribe(random.RandString(10), 20480)
+	zap_logger.Zap.Info("sse subscribe", zap.String("host", host))
 
 	defer func() {
 		p.Unsubscribe(sub.ID)
-		Zap.Info("sse unsubscribe", zap.String("host", host))
+		zap_logger.Zap.Info("sse unsubscribe", zap.String("host", host))
 	}()
 
 	_, err := fmt.Fprintf(w, "ping: \n\n")
@@ -167,7 +167,7 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case bd := <-sub.Channel:
 			if time.Since(*bd.CreateTime) > 400*time.Millisecond {
-				Zap.Warn("Dropping expired message", zap.Time("createTime", *bd.CreateTime))
+				zap_logger.Zap.Warn("Dropping expired message", zap.Time("createTime", *bd.CreateTime))
 				continue
 			}
 			data := define.SseBundleData{}
@@ -193,16 +193,16 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 
-			if time.Now().After(enforceTokenStartTime) {
-				if authToken == "" {
-					http.Error(w, "Auth token is missing", http.StatusUnauthorized)
-					return
-				}
-				if !p.validateToken(authToken) {
-					http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
-					return
-				}
-			}
+			//if time.Now().After(enforceTokenStartTime) {
+			//	if authToken == "" {
+			//		http.Error(w, "Auth token is missing", http.StatusUnauthorized)
+			//		return
+			//	}
+			//	if !p.validateToken(authToken) {
+			//		http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
+			//		return
+			//	}
+			//}
 		case <-flushTicker.C:
 			if processed > 0 {
 				flusher.Flush()
@@ -214,7 +214,7 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if sub.Exit.Load() {
-			Zap.Info("receive exit signal,exit")
+			zap_logger.Zap.Info("receive exit signal,exit")
 			return
 		}
 	}
@@ -240,25 +240,25 @@ func (p *SSEServer) Unsubscribe(id string) {
 	}
 }
 
-func (p *SSEServer) validateToken(token string) bool {
-	if len(token) == 0 {
-		return false
-	}
-
-	if token == "adminToken" {
-		return true
-	}
-
-	info := portal.UserServer.GetUserInfo(token)
-	if info == nil {
-		return false
-	}
-
-	if info.PlanId == 3 || info.PlanId == 2 {
-		return true
-	}
-	return false
-}
+//func (p *SSEServer) validateToken(token string) bool {
+//	if len(token) == 0 {
+//		return false
+//	}
+//
+//	if token == "adminToken" {
+//		return true
+//	}
+//
+//	info := portal.UserServer.GetUserInfo(token)
+//	if info == nil {
+//		return false
+//	}
+//
+//	if info.PlanId == 3 || info.PlanId == 2 {
+//		return true
+//	}
+//	return false
+//}
 
 func (p *SSEServer) extractToken(authHeader string) string {
 	if strings.HasPrefix(authHeader, "Bearer ") {

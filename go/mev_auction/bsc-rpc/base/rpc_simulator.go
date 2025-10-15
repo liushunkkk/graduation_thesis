@@ -44,16 +44,30 @@ func (s *BundleSimulatorImpl) ExecuteBundle(parent *types.Header, bundle *Bundle
 	price := 0
 	if bundle.Parent != nil {
 		time.Sleep(30 * time.Millisecond)
-		price = 200 + rand.Intn(100)
+		if bundle.Parent.Parent != nil {
+			price = 200 + rand.Intn(200)
+		} else {
+			price = 200 + rand.Intn(100)
+		}
 	} else {
 		time.Sleep(20 * time.Millisecond)
 		price = 100 + rand.Intn(100)
 	}
+	var sseTxs []define.SseTxData
+	if bundle.Parent != nil {
+		if bundle.Parent.Parent != nil {
+			d, _ := s.RpcSimulator.BuildTxData(bundle, bundle.Parent.Parent.Txs[0], &types.Receipt{})
+			sseTxs = append(sseTxs, d)
+		}
+		d, _ := s.RpcSimulator.BuildTxData(bundle, bundle.Txs[0], &types.Receipt{})
+		sseTxs = append(sseTxs, d)
+	}
 	d, _ := s.RpcSimulator.BuildTxData(bundle, bundle.Txs[0], &types.Receipt{})
+	sseTxs = append(sseTxs, d)
 	return big.NewInt(int64(price)), &define.SseBundleData{
 		ChainID:          "56",
 		Hash:             bundle.hash.Load().(common.Hash).Hex(),
-		SseTxs:           []define.SseTxData{d},
+		SseTxs:           sseTxs,
 		NextBlockNumber:  bundle.MaxBlockNumber,
 		MaxBlockNumber:   bundle.MaxBlockNumber,
 		ProxyBidContract: "0x74Ce839c6aDff544139f27C1257D34944B794605",

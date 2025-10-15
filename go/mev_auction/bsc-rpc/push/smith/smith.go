@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum-test/push/define"
+	"github.com/ethereum/go-ethereum-test/zap_logger"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
-	. "github.com/ethereum/go-ethereum/log/zap"
-	"github.com/ethereum/go-ethereum/push/define"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -46,7 +46,11 @@ func (smith *Smith) SendBundle(param define.Param, hash common.Hash) {
 	bd.Params = []define.Param{param}
 
 	data, _ := json.Marshal(bd)
-	Zap.Info("smith send", zap.Any("hash", hash), zap.Any("req", bd))
+	cost := time.Now().Sub(param.ArrivalTime).Microseconds()
+
+	zap_logger.Zap.Info("[smith-send]", zap.Any("hash", hash), zap.Any("cost", cost), zap.Any("txs", len(param.Txs)))
+	time.Sleep(20 * time.Millisecond)
+	return
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -73,7 +77,7 @@ func (smith *Smith) SendBundle(param define.Param, hash common.Hash) {
 		log.Error("receive smith builder resp body error:", err)
 		return
 	}
-	Zap.Info(fmt.Sprintf("smith builder resp[%v]:%s", hash, string(body)))
+	zap_logger.Zap.Info(fmt.Sprintf("smith builder resp[%v]:%s", hash, string(body)))
 }
 
 func (smith *Smith) SendRawPrivateTransaction(txHex string, bundleHash common.Hash) {
