@@ -5,6 +5,34 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
+const (
+	HintHash             = "hash"
+	HintFrom             = "from"
+	HintTo               = "to"
+	HintValue            = "value"
+	HintNonce            = "nonce"
+	HintCallData         = "calldata"
+	HintFunctionSelector = "functionSelector"
+	HintGasLimit         = "gasLimit"
+	HintGasPrice         = "gasPrice"
+	HintLogs             = "logs"
+)
+
+func GetAllHints() map[string]bool {
+	return map[string]bool{
+		HintHash:             true,
+		HintFrom:             true,
+		HintTo:               true,
+		HintValue:            true,
+		HintNonce:            true,
+		HintCallData:         true,
+		HintFunctionSelector: true,
+		HintGasLimit:         true,
+		HintGasPrice:         true,
+		HintLogs:             true,
+	}
+}
+
 type SendMevBundleArgs struct {
 	Hash              common.Hash
 	Txs               []hexutil.Bytes

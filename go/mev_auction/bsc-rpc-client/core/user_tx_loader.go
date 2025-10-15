@@ -1,13 +1,13 @@
 package core
 
 import (
+	"bsc-rpc-client/zap_logger"
 	"fmt"
-	"log"
 	"sync/atomic"
 )
 
-// EthereumTransaction 只保留必要字段
-type EthereumTransaction struct {
+// ComparisonTransaction 只保留必要字段
+type ComparisonTransaction struct {
 	ID               uint   `gorm:"primaryKey;autoIncrement"`
 	TxHash           string `gorm:"column:tx_hash"`
 	OriginJsonString string `gorm:"column:origin_json_string"`
@@ -15,13 +15,13 @@ type EthereumTransaction struct {
 
 // TxLoader 负责加载并管理交易数据
 type TxLoader struct {
-	txs    []EthereumTransaction // 缓存的交易数据
-	index  uint64                // 当前读取位置
-	loaded bool                  // 是否已加载
+	txs    []ComparisonTransaction // 缓存的交易数据
+	index  uint64                  // 当前读取位置
+	loaded bool                    // 是否已加载
 }
 
-// GlobalTxLoader 全局实例
-var GlobalTxLoader = &TxLoader{}
+// UserTxLoader 全局实例
+var UserTxLoader = &TxLoader{}
 
 // LoadFromDB 从数据库中加载所有交易（只取必要字段）
 func (l *TxLoader) LoadFromDB(limit int) error {
@@ -29,8 +29,8 @@ func (l *TxLoader) LoadFromDB(limit int) error {
 		return fmt.Errorf("交易数据已加载，禁止重复加载")
 	}
 
-	var txs []EthereumTransaction
-	query := DB.Select("id", "tx_hash", "origin_json_string")
+	var txs []ComparisonTransaction
+	query := DB.Table("comparison_transactions").Select("id", "tx_hash", "origin_json_string")
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -46,14 +46,14 @@ func (l *TxLoader) LoadFromDB(limit int) error {
 	l.txs = txs
 	l.index = 0
 	l.loaded = true
-	log.Printf("已加载 %d 条交易到内存\n", len(l.txs))
+	zap_logger.Zap.Info(fmt.Sprintf("已加载 %d 条交易到内存\n", len(l.txs)))
 	return nil
 }
 
 // Next 返回下一条交易（线程安全）
-func (l *TxLoader) Next() *EthereumTransaction {
+func (l *TxLoader) Next() *ComparisonTransaction {
 	if !l.loaded {
-		log.Println("交易数据未加载，请先调用 LoadFromDB()")
+		zap_logger.Zap.Info(fmt.Sprintf("交易数据未加载，请先调用 LoadFromDB()"))
 		return nil
 	}
 

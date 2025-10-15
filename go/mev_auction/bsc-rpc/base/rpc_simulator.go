@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/spf13/cast"
 	"math/big"
+	"math/rand"
+	"time"
 )
 
 var (
@@ -26,6 +28,38 @@ var (
 
 type BundleSimulator interface {
 	ExecuteBundle(parent *types.Header, bundle *Bundle, rpcBribeAddress common.Address) (*big.Int, *define.SseBundleData, error)
+}
+
+type BundleSimulatorImpl struct {
+	RpcSimulator *RpcSimulator
+}
+
+func NewBundleSimulator() *BundleSimulatorImpl {
+	return &BundleSimulatorImpl{
+		RpcSimulator: NewRpcSimulator(),
+	}
+}
+
+func (s *BundleSimulatorImpl) ExecuteBundle(parent *types.Header, bundle *Bundle, rpcBribeAddress common.Address) (*big.Int, *define.SseBundleData, error) {
+	price := 0
+	if bundle.Parent != nil {
+		time.Sleep(30 * time.Millisecond)
+		price = 200 + rand.Intn(100)
+	} else {
+		time.Sleep(20 * time.Millisecond)
+		price = 100 + rand.Intn(100)
+	}
+	d, _ := s.RpcSimulator.BuildTxData(bundle, bundle.Txs[0], &types.Receipt{})
+	return big.NewInt(int64(price)), &define.SseBundleData{
+		ChainID:          "56",
+		Hash:             bundle.hash.Load().(common.Hash).Hex(),
+		SseTxs:           []define.SseTxData{d},
+		NextBlockNumber:  bundle.MaxBlockNumber,
+		MaxBlockNumber:   bundle.MaxBlockNumber,
+		ProxyBidContract: "0x74Ce839c6aDff544139f27C1257D34944B794605",
+		RefundAddress:    bundle.RefundAddress.Hex(),
+		RefundCfg:        1009050,
+	}, nil
 }
 
 // RpcSimulator simulator for rpc service

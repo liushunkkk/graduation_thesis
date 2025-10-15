@@ -3,11 +3,13 @@ package core
 import (
 	"bsc-rpc-client/client"
 	"bsc-rpc-client/model"
+	"bsc-rpc-client/zap_logger"
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"io"
 	"math/rand"
 	"net/http"
@@ -81,22 +83,21 @@ func (s *Searcher) Start() {
 	req, _ := http.NewRequest("GET", s.stream, nil)
 	resp, err := s.client.Do(req)
 	if err != nil {
-		fmt.Printf("[Searcher %02d][%s] SSE连接失败: %v\n", s.id, s.group, err)
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] SSE连接失败: %v\n", s.id, s.group, err))
 		return
 	}
 	defer resp.Body.Close()
 
 	reader := bufio.NewReader(resp.Body)
-	fmt.Printf("[Searcher %02d][%s] 已连接SSE\n", s.id, s.group)
-
+	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 已连接SSE\n", s.id, s.group))
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				fmt.Printf("[Searcher %02d] SSE连接关闭\n", s.id)
+				zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] SSE连接关闭\n", s.id))
 				return
 			}
-			fmt.Printf("[Searcher %02d] 读取错误: %v\n", s.id, err)
+			zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 读取错误: %v\n", s.id, err))
 			return
 		}
 
@@ -110,49 +111,48 @@ func (s *Searcher) Start() {
 			continue
 		}
 
-		s.handleMessage(&msg)
+		go s.handleMessage(&msg)
 	}
 }
 
 func (s *Searcher) handleMessage(msg *SseBundleData) {
 	r := rand.Float64()
 	if r < s.prob {
-		fmt.Printf("[Searcher %02d][%s] 收到 bundle (%s)，发送响应 (%.0f%%)\n",
-			s.id, s.group, msg.Hash, s.prob*100)
+		// 随机休眠一段时间，模拟在计算
+		time.Sleep(time.Millisecond * time.Duration(RandomAround400()))
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 收到 bundle (%s)，发送响应 (%.0f%%)\n",
+			s.id, s.group, msg.Hash, s.prob*100))
 		s.sendBundle(msg)
 	} else {
-		fmt.Printf("[Searcher %02d][%s] 收到 bundle (%s)，跳过发送 (%.0f%%)\n",
-			s.id, s.group, msg.Hash, s.prob*100)
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 收到 bundle (%s)，跳过发送 (%.0f%%)\n",
+			s.id, s.group, msg.Hash, s.prob*100))
 	}
 }
 
 func (s *Searcher) sendBundle(msg *SseBundleData) {
+	next := SearcherTxLoader.Next()
+	if next == nil {
+		return
+	}
+	tx := new(types.Transaction)
+	_ = tx.UnmarshalJSON(hexutil.Bytes(next.OriginJsonString))
+
+	input, _ := tx.MarshalBinary()
+
 	args := &model.SendMevBundleArgs{
-		Hash:           randomHash(),
-		Txs:            []hexutil.Bytes{randomTx()},
-		MaxBlockNumber: 12345678,
-		Hint:           map[string]bool{"arbitrage": true},
-		RefundAddress:  common.HexToAddress("0x0000000000000000000000000000000000000000"),
+		Hash:           common.HexToHash(msg.Hash),
+		Txs:            []hexutil.Bytes{input},
+		MaxBlockNumber: msg.MaxBlockNumber,
+		Hint:           model.GetAllHints(),
+		RefundAddress:  common.HexToAddress(msg.RefundAddress),
 		RefundPercent:  80,
 	}
 	resp, err := s.rpcClient.SendMevBundle(args)
 	if err != nil {
-		fmt.Printf("[Searcher %02d] 发送bundle失败: %v\n", s.id, err)
+		zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 发送bundle失败: %v\n", s.id, err))
 		return
 	}
-	fmt.Printf("[Searcher %02d] 发送bundle成功，BundleHash: %s\n", s.id, resp.BundleHash.Hex())
-}
-
-func randomHash() common.Hash {
-	var b [32]byte
-	rand.Read(b[:])
-	return common.BytesToHash(b[:])
-}
-
-func randomTx() hexutil.Bytes {
-	raw := make([]byte, 128)
-	rand.Read(raw)
-	return hexutil.Bytes(raw)
+	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 发送bundle成功，BundleHash: %s\n", s.id, resp.BundleHash.Hex()))
 }
 
 func InitSearcher() {
@@ -175,4 +175,9 @@ func InitSearcher() {
 	for _, s := range searchers {
 		go s.Start()
 	}
+}
+
+func RandomAround400() int64 {
+	rand.Seed(time.Now().UnixNano())       // 记得只在程序启动时调用一次
+	return int64(400 + rand.Intn(41) - 20) // 400 ±20 => [380,420]
 }

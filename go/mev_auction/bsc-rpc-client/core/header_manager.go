@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bsc-rpc-client/client"
 	"sync/atomic"
 	"time"
 )
@@ -20,6 +21,7 @@ func (m *BlockNumberManager) StartAutoIncrement() {
 		defer ticker.Stop()
 		for range ticker.C {
 			atomic.AddUint64(&m.current, 1)
+			go client.GlobalRpcClient.ResetHeader(atomic.LoadUint64(&m.current))
 		}
 	}()
 }

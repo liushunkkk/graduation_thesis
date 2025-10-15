@@ -3,7 +3,9 @@ package core
 import (
 	"bsc-rpc-client/client"
 	"bsc-rpc-client/model"
+	"bsc-rpc-client/zap_logger"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"time"
 )
@@ -22,7 +24,7 @@ func NewUser(id int, rpcURL string) *User {
 }
 
 func (u *User) Start() {
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(2000 * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -31,10 +33,16 @@ func (u *User) Start() {
 }
 
 func (u *User) sendTransaction() {
-	next := GlobalTxLoader.Next()
+	next := UserTxLoader.Next()
+	if next == nil {
+		return
+	}
 	// 模拟交易数据
-	tx := types.NewTx(nil)
-	_ = tx.UnmarshalJSON([]byte(next.OriginJsonString))
+	tx := new(types.Transaction)
+	err := tx.UnmarshalJSON(hexutil.Bytes(next.OriginJsonString))
+	if err != nil {
+		return
+	}
 
 	input, _ := tx.MarshalBinary()
 
@@ -45,13 +53,13 @@ func (u *User) sendTransaction() {
 
 	resp, err := u.rpc.SendRawTransaction(args)
 	if err != nil {
-		fmt.Printf("User %d 发送交易失败: %v\n", u.id, err)
+		zap_logger.Zap.Info(fmt.Sprintf("User %d 发送交易失败: %v\n", u.id, err))
 		return
 	}
 
 	u.txCount++
 	if resp != nil {
-		fmt.Printf("User %d 发送交易成功 #%d, 返回TxHash: %s\n", u.id, u.txCount, resp.TxHash.Hex())
+		zap_logger.Zap.Info(fmt.Sprintf("User %d 发送交易成功 #%d, 返回TxHash: %s\n", u.id, u.txCount, resp.TxHash.Hex()))
 	}
 }
 

@@ -2,6 +2,7 @@ package client
 
 import (
 	"bsc-rpc-client/model"
+	"bsc-rpc-client/zap_logger"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,8 @@ type JSONRPCClient struct {
 	client *http.Client
 }
 
+var GlobalRpcClient = NewJSONRPCClient("http://127.0.0.1:8080")
+
 // NewJSONRPCClient 创建客户端实例
 func NewJSONRPCClient(url string) *JSONRPCClient {
 	return &JSONRPCClient{
@@ -53,7 +56,6 @@ func NewJSONRPCClient(url string) *JSONRPCClient {
 }
 
 // Call 发起 JSON-RPC 调用
-// params 可以是 map / slice / nil，会被自动编码为 []json.RawMessage
 func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCResponse, error) {
 	rawParams, err := encodeParams(params)
 	if err != nil {
@@ -91,35 +93,16 @@ func encodeParams(params interface{}) ([]json.RawMessage, error) {
 		return []json.RawMessage{}, nil
 	}
 
-	switch v := params.(type) {
-	case []interface{}:
-		arr := make([]json.RawMessage, 0, len(v))
-		for _, p := range v {
-			b, err := json.Marshal(p)
-			if err != nil {
-				return nil, err
-			}
-			arr = append(arr, b)
-		}
-		return arr, nil
-	case map[string]interface{}, string, int, float64, bool:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		return []json.RawMessage{b}, nil
-	default:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		return []json.RawMessage{b}, nil
+	b, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
 	}
+	return []json.RawMessage{b}, nil
 }
 
 // SendMevBundle 发送一组 MEV bundle
 func (c *JSONRPCClient) SendMevBundle(args *model.SendMevBundleArgs) (*model.SendMevBundleResponse, error) {
-	resp, err := c.Call(SendMevBundleEndpointName, []interface{}{args})
+	resp, err := c.Call(SendMevBundleEndpointName, args)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +113,7 @@ func (c *JSONRPCClient) SendMevBundle(args *model.SendMevBundleArgs) (*model.Sen
 
 // SendRawTransaction 发送原始交易
 func (c *JSONRPCClient) SendRawTransaction(args *model.SendRawTransactionArgs) (*model.SendRawTransactionResponse, error) {
-	resp, err := c.Call(SendRawTransactionEndpointName, []interface{}{args})
+	resp, err := c.Call(SendRawTransactionEndpointName, args)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +124,12 @@ func (c *JSONRPCClient) SendRawTransaction(args *model.SendRawTransactionArgs) (
 
 // ResetHeader 重置区块头
 func (c *JSONRPCClient) ResetHeader(blockNumber uint64) error {
-	resp, err := c.Call(ResetHeaderEndpointName, []interface{}{blockNumber})
+	resp, err := c.Call(ResetHeaderEndpointName, blockNumber)
 	if err != nil {
 		return fmt.Errorf("ResetHeader 调用失败: %w", err)
 	}
 	var result model.ResetHeaderResponse
 	json.Unmarshal(*resp.Result, &result)
-	fmt.Println("ResetHeader result header number:", result.HeaderNumber)
+	zap_logger.Zap.Info(fmt.Sprintf("ResetHeader result header number: %d", result.HeaderNumber))
 	return nil
 }
