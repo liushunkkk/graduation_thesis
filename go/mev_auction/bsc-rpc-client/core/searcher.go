@@ -5,6 +5,7 @@ import (
 	"bsc-rpc-client/model"
 	"bsc-rpc-client/zap_logger"
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
@@ -80,7 +81,7 @@ func NewSearcher(id int, group string, prob float64, streamURL, rpcURL string) *
 	}
 }
 
-func (s *Searcher) Start() {
+func (s *Searcher) Start(ctx context.Context, block bool) {
 	req, _ := http.NewRequest("GET", s.stream, nil)
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -91,28 +92,38 @@ func (s *Searcher) Start() {
 
 	reader := bufio.NewReader(resp.Body)
 	zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d][%s] 已连接SSE", s.id, s.group))
+
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] SSE连接关闭", s.id))
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] SSE连接关闭", s.id))
+					return
+				}
+				zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 读取错误: %v", s.id, err))
 				return
 			}
-			zap_logger.Zap.Info(fmt.Sprintf("[Searcher %02d] 读取错误: %v", s.id, err))
-			return
-		}
 
-		if len(line) < 6 || line[:5] != "data:" {
-			continue
-		}
+			if block && s.id == 6 {
+				time.Sleep(1 * time.Minute) // 模拟某个搜索者阻塞的情况，阻塞一分钟
+			}
 
-		payload := line[5:]
-		var msg SseBundleData
-		if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-			continue
-		}
+			if len(line) < 6 || line[:5] != "data:" {
+				continue
+			}
 
-		go s.handleMessage(&msg)
+			payload := line[5:]
+			var msg SseBundleData
+			if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+				continue
+			}
+
+			go s.handleMessage(&msg)
+		}
 	}
 }
 
@@ -128,15 +139,15 @@ func (s *Searcher) handleMessage(msg *SseBundleData) {
 	r := rand.Float64()
 	if len(msg.SseTxs) == 1 && r < s.prob {
 		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive one level bundle，准备发送，概率值： (%.2f)/[%s]",
-			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixNano()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
+			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixMicro()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
 		// 随机休眠一段时间，模拟在计算
-		time.Sleep(time.Millisecond * time.Duration(RandomAround400()))
+		time.Sleep(time.Millisecond * time.Duration(RandomAround300()))
 		s.sendBundle(msg)
 	} else if len(msg.SseTxs) == 2 && r < s.prob/3.0 {
 		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive two level bundle，准备发送，概率值： (%.2f)/[%s]",
-			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixNano()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
+			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixMicro()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
 		// 随机休眠一段时间，模拟在计算
-		time.Sleep(time.Millisecond * time.Duration(RandomAround400()))
+		time.Sleep(time.Millisecond * time.Duration(RandomAround300()))
 		s.sendBundle(msg)
 	}
 }
@@ -167,7 +178,7 @@ func (s *Searcher) sendBundle(msg *SseBundleData) {
 	zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] 发送bundle成功，BundleHash: %s", s.id, resp.BundleHash.Hex()))
 }
 
-func InitSearcher(num int) {
+func InitSearcher(ctx context.Context, num int, block bool) {
 	rand.Seed(time.Now().UnixNano())
 
 	streamURL := "http://localhost:8080/stream"
@@ -184,11 +195,11 @@ func InitSearcher(num int) {
 	}
 
 	for _, s := range searchers {
-		go s.Start()
+		go s.Start(ctx, block)
 	}
 }
 
-func RandomAround400() int64 {
+func RandomAround300() int64 {
 	rand.Seed(time.Now().UnixNano())        // 记得只在程序启动时调用一次
-	return int64(400 + rand.Intn(101) - 50) // 400 ±50 => [350,450]
+	return int64(300 + rand.Intn(101) - 50) // 300 ±50 => [250,350]
 }

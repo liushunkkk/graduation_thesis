@@ -4,6 +4,7 @@ import (
 	"bsc-rpc-client/client"
 	"bsc-rpc-client/model"
 	"bsc-rpc-client/zap_logger"
+	"context"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -24,12 +25,17 @@ func NewUser(id int, rpcURL string) *User {
 	}
 }
 
-func (u *User) Start() {
+func (u *User) Start(ctx context.Context) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		u.sendTransaction()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			u.sendTransaction()
+		}
 	}
 }
 
@@ -49,7 +55,7 @@ func (u *User) sendTransaction() {
 
 	args := &model.SendRawTransactionArgs{
 		Input:          input,
-		MaxBlockNumber: GlobalBlockManager.GetCurrentBlock() + 1,
+		MaxBlockNumber: GlobalBlockManager.GetCurrentBlock() + 2,
 	}
 
 	resp, err := u.rpc.SendRawTransaction(args)
@@ -60,14 +66,14 @@ func (u *User) sendTransaction() {
 
 	u.txCount++
 	if resp != nil {
-		zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 发送交易成功 #%d", u.id, u.txCount), zap.Any("sendTime", time.Now().UnixNano()), zap.Any("txHash", tx.Hash().Hex()), zap.Any("respTxHash", resp.TxHash.Hex()))
+		zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 发送交易成功 #%d", u.id, u.txCount), zap.Any("sendTime", time.Now().UnixMicro()), zap.Any("txHash", tx.Hash().Hex()), zap.Any("respTxHash", resp.TxHash.Hex()))
 	}
 }
 
-func InitUser(num int) {
+func InitUser(ctx context.Context, num int) {
 	rpcURL := "http://localhost:8080"
 	for i := 1; i <= num; i++ {
 		user := NewUser(i, rpcURL)
-		go user.Start()
+		go user.Start(ctx)
 	}
 }

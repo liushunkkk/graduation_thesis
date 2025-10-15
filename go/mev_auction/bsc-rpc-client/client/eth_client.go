@@ -85,7 +85,7 @@ func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCRespons
 
 	end := time.Now()
 
-	zap_logger.Zap.Info(fmt.Sprintf("[call-%s]", method), zap.Any("cost", end.Sub(start).Nanoseconds()))
+	zap_logger.Zap.Info(fmt.Sprintf("[call-%s]", method), zap.Any("cost", end.Sub(start).Microseconds()))
 
 	if rpcResp.Error != nil {
 		return &rpcResp, fmt.Errorf("RPC error: %d - %s", rpcResp.Error.Code, rpcResp.Error.Message)
