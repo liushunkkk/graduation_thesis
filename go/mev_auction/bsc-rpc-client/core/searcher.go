@@ -108,7 +108,7 @@ func (s *Searcher) Start(ctx context.Context, block bool) {
 				return
 			}
 
-			if block && s.id == 6 {
+			if block && s.id == 6 && GlobalIsBlock {
 				time.Sleep(1 * time.Minute) // 模拟某个搜索者阻塞的情况，阻塞一分钟
 			}
 
@@ -143,13 +143,14 @@ func (s *Searcher) handleMessage(msg *SseBundleData) {
 		// 随机休眠一段时间，模拟在计算
 		time.Sleep(time.Millisecond * time.Duration(RandomAround300()))
 		s.sendBundle(msg)
-	} else if len(msg.SseTxs) == 2 && r < s.prob/3.0 {
-		zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive two level bundle，准备发送，概率值： (%.2f)/[%s]",
-			s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixMicro()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
-		// 随机休眠一段时间，模拟在计算
-		time.Sleep(time.Millisecond * time.Duration(RandomAround300()))
-		s.sendBundle(msg)
 	}
+	//else if len(msg.SseTxs) == 2 && r < s.prob/3.0 {
+	//	zap_logger.Zap.Info(fmt.Sprintf("[Searcher][%02d] receive two level bundle，准备发送，概率值： (%.2f)/[%s]",
+	//		s.id, r, s.group), zap.Any("receiveTime", time.Now().UnixMicro()), zap.Any("parentHash", msg.Hash), zap.Any("txHashes", getAllTxHash(msg)))
+	//	// 随机休眠一段时间，模拟在计算
+	//	time.Sleep(time.Millisecond * time.Duration(RandomAround300()))
+	//	s.sendBundle(msg)
+	//}
 }
 
 func (s *Searcher) sendBundle(msg *SseBundleData) {

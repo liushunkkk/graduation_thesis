@@ -3,6 +3,8 @@ package mevshare
 import (
 	"context"
 	"errors"
+	"github.com/flashbots/mev-share-node/zap_logger"
+	"math/big"
 	"math/rand"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/flashbots/mev-share-node/jsonrpcserver"
+	"github.com/flashbots/mev-share-node/spike"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -57,23 +60,32 @@ type API struct {
 	simRateLimiter *rate.Limiter
 	builders       BuildersBackend
 
+	spikeManager     *spike.Manager[*SendMevBundleArgs]
 	knownBundleCache *lru.Cache[common.Hash, SendMevBundleArgs]
+	// 用redis pub/sub 模式模拟的队列
+	//cancellationCache *RedisCancellationCache
 }
 
 func NewAPI(
 	log *zap.Logger,
-	scheduler SimScheduler, signer types.Signer,
+	scheduler SimScheduler, bundleStorage BundleStorage, signer types.Signer,
 	simBackends []SimulationBackend, simRateLimit rate.Limit, builders BuildersBackend,
 	sbundleValidDuration time.Duration,
 ) *API {
+	sm := spike.NewManager(func(ctx context.Context, k string) (*SendMevBundleArgs, error) {
+		return bundleStorage.GetBundleByMatchingHash(ctx, common.HexToHash(k))
+	}, sbundleValidDuration)
+
 	return &API{
 		log: log,
 
 		scheduler:        scheduler,
+		bundleStorage:    bundleStorage,
 		signer:           signer,
 		simBackends:      simBackends,
 		simRateLimiter:   rate.NewLimiter(simRateLimit, 1),
 		builders:         builders,
+		spikeManager:     sm,
 		knownBundleCache: lru.NewCache[common.Hash, SendMevBundleArgs](bundleCacheSize),
 	}
 }
@@ -100,13 +112,17 @@ func (m *API) SendBundle(ctx context.Context, bundle SendMevBundleArgs) (_ SendM
 	logger := m.log
 	startAt := time.Now()
 
+	currentBlock := CurrentHeader.Number.Uint64()
+	bundle.ArrivalTime = startAt
+
 	// bundle hash
-	hash, hasUnmatchedHash, err := ValidateBundle(&bundle, 0, m.signer)
+	hash, hasUnmatchedHash, err := ValidateBundle(&bundle, currentBlock, m.signer)
 	if err != nil {
 		logger.Warn("failed to validate bundle", zap.Error(err))
 		return SendMevBundleResponse{}, err
 	}
 	logger.Debug("received bundle", zap.String("bundle", hash.String()), zap.Time("receivedAt", startAt), zap.Int64("timestamp", startAt.Unix()))
+	zap_logger.Zap.Info("received bundle", zap.String("bundle", hash.String()), zap.Time("receivedAt", startAt), zap.Any("MaxBlock", bundle.Inclusion.MaxBlock))
 
 	if oldBundle, ok := m.knownBundleCache.Get(hash); ok {
 		if !newerInclusion(&oldBundle, &bundle) {
@@ -129,17 +145,56 @@ func (m *API) SendBundle(ctx context.Context, bundle SendMevBundleArgs) (_ SendM
 
 	// unmatched 表示不支持 simulation，包含未签名交易
 	if hasUnmatchedHash {
+		// 不支持模拟的那个交易hash,其实就是searcher套利的交易，需要从spike中根据hash取出bundle
+		var unmatchedHash common.Hash
+		if len(bundle.Body) > 0 && bundle.Body[0].Hash != nil {
+			unmatchedHash = *bundle.Body[0].Hash
+		} else {
+			return SendMevBundleResponse{}, ErrInternalServiceError
+		}
+		unmatchedBundle, err := m.spikeManager.GetResult(ctx, unmatchedHash.String())
+		if err != nil {
+			logger.Error("Failed to fetch unmatched bundle", zap.Error(err), zap.String("matching_hash", unmatchedHash.Hex()))
+			return SendMevBundleResponse{}, ErrBackrunNotFound
+		}
+		// 不太理解，官网上说包含hash交易的bundle不允许是用privacy设置，但这里必须要设置hash hint
+		if privacy := unmatchedBundle.Privacy; privacy == nil || !privacy.Hints.HasHint(HintHash) {
+			// if the unmatched bundle have not configured privacy or has not set the hash hint
+			// then we cannot backrun it
+			logger.Error("unmatched bundle has no hash hint", zap.String("hash", unmatchedHash.Hex()))
+			return SendMevBundleResponse{}, ErrBackrunInvalidBundle
+		}
+		bundle.Body[0].Bundle = unmatchedBundle
 		bundle.Body[0].Hash = nil
+		// replace matching hash with actual bundle hash
+		findAndReplace(bundle.Metadata.BodyHashes, unmatchedHash, unmatchedBundle.Metadata.BundleHash)
 		// send 90 % of the refund to the unmatched bundle or the suggested refund if set
 		refundPercent := RefundPercent
+		if unmatchedBundle.Privacy != nil && unmatchedBundle.Privacy.WantRefund != nil {
+			refundPercent = *unmatchedBundle.Privacy.WantRefund
+		}
 		bundle.Validity.Refund = []RefundConstraint{{0, refundPercent}}
 		MergePrivacyBuilders(&bundle)
+		err = MergeInclusionIntervals(&bundle.Inclusion, unmatchedBundle.Inclusion)
+		if err != nil {
+			return SendMevBundleResponse{}, ErrBackrunInclusion
+		}
 	}
 
-	//highPriority := jsonrpcserver.GetPriority(ctx)
+	//if bundle.ReplacementUUID != "" {
+	//	// todo: add replacementUUID validation
+	//	rNonce, err := m.replacementCache.IncReplacementNonce(ctx, signerAddress.String(), bundle.ReplacementUUID)
+	//	if err != nil {
+	//		logger.Error("Failed to increment replacement nonce", zap.Error(err))
+	//		return SendMevBundleResponse{}, ErrInternalServiceError
+	//	}
+	//	bundle.Metadata.ReplacementNonce = rNonce
+	//}
+
+	highPriority := jsonrpcserver.GetPriority(ctx)
 	// 所有的 metadata 设置好了，主要是用于模拟
 	// 加入交易模拟队列
-	err = m.scheduler.ScheduleBundleSimulation(ctx, &bundle, false)
+	err = m.scheduler.ScheduleBundleSimulation(ctx, &bundle, highPriority)
 	if err != nil {
 		logger.Error("Failed to schedule bundle simulation", zap.Error(err))
 		return SendMevBundleResponse{}, ErrInternalServiceError
@@ -163,7 +218,6 @@ func (m *API) SendBundle(ctx context.Context, bundle SendMevBundleArgs) (_ SendM
 //	 "logs": [{}, {}]
 //	}
 func (m *API) SimBundle(ctx context.Context, bundle SendMevBundleArgs, aux SimMevBundleAuxArgs) (_ *SimMevBundleResponse, err error) {
-
 	if len(m.simBackends) == 0 {
 		return nil, ErrInternalServiceError
 	}
@@ -183,4 +237,53 @@ func (m *API) SimBundle(ctx context.Context, bundle SendMevBundleArgs, aux SimMe
 	idx := rand.Intn(len(m.simBackends)) //nolint:gosec
 	backend := m.simBackends[idx]
 	return backend.SimulateBundle(ctx, &bundle, &aux)
+}
+
+// CancelBundleByHash cancels a bundle by hash
+// This method is not exposed on the bundle relay.
+// However, it is used by the Flashbots bundle relay for now to handle the cancellation of private transactions.
+// err = m.cancellationCache.Add(ctx, hash) 可见他是通过 redis来模拟一个队列，并设置了过期时间，通过redis来实现
+//func (m *API) CancelBundleByHash(ctx context.Context, hash common.Hash) (err error) {
+//	logger := m.log.With(zap.String("bundle", hash.Hex()))
+//	ctx, cancel := context.WithTimeout(ctx, cancelBundleTimeout)
+//	defer cancel()
+//	signerAddress := jsonrpcserver.GetSigner(ctx)
+//	// 这里 cancel 就是在数据库中将 cancel 字段设置为true
+//	err = m.bundleStorage.CancelBundleByHash(ctx, hash, signerAddress)
+//	if err != nil {
+//		if !errors.Is(err, ErrBundleNotCancelled) {
+//			logger.Warn("Failed to cancel bundle", zap.Error(err))
+//		}
+//		return ErrBundleNotCancelled
+//	}
+//	// 然后加入队列，然后读取队列，在调用别的rpc服务 ？？？？
+//	err = m.cancellationCache.Add(ctx, hash)
+//	if err != nil {
+//		logger.Error("Failed to add bundle to cancellation cache", zap.Error(err))
+//	}
+//
+//	logger.Info("Bundle cancelled")
+//	return nil
+//}
+
+type ResetHeaderArgs struct {
+	HeaderNumber uint64
+	Time         uint64
+}
+
+type ResetHeaderResponse struct {
+	HeaderNumber uint64 `json:"headerNumber"`
+}
+
+// ResetHeader 客户端定时调用即可
+func (m *API) ResetHeader(ctx context.Context, args ResetHeaderArgs) (ResetHeaderResponse, error) {
+	curr := &types.Header{
+		Number: big.NewInt(int64(args.HeaderNumber)),
+		Time:   args.Time,
+	}
+	CurrentHeader = curr
+	zap_logger.Zap.Info("resetting header", zap.Uint64("headerNumber", args.HeaderNumber))
+	return ResetHeaderResponse{
+		HeaderNumber: args.HeaderNumber,
+	}, nil
 }

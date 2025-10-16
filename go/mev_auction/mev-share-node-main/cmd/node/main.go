@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/flashbots/mev-share-node/sse_transfer"
 	"math/big"
 	"net/http"
 	"os"
@@ -39,8 +40,8 @@ var (
 	defaultChannelName           = cli.GetEnv("REDIS_CHANNEL_NAME", "hints")
 	defaultRedisEndpoint         = cli.GetEnv("REDIS_ENDPOINT", "redis://localhost:6379")
 	defaultSimulationsEndpoint   = cli.GetEnv("SIMULATION_ENDPOINTS", "http://127.0.0.1:8545")
-	defaultWorkersPerNode        = cli.GetEnv("WORKERS_PER_SIM_ENDPOINT", "2")
-	defaultEthEndpoint           = cli.GetEnv("ETH_ENDPOINT", "http://127.0.0.1:8545")
+	defaultWorkersPerNode        = cli.GetEnv("WORKERS_PER_SIM_ENDPOINT", "8")
+	defaultPostgresDSN           = cli.GetEnv("POSTGRES_DSN", "postgres://postgres:123456@localhost:5432/postgres?sslmode=disable")
 	defaultMevSimBundleRateLimit = cli.GetEnv("MEV_SIM_BUNDLE_RATE_LIMIT", "5")
 	// See `BuildersConfig` external_builders.go for more info
 	defaultBuildersConfig   = cli.GetEnv("BUILDERS_CONFIG", "builders.yaml")
@@ -56,7 +57,7 @@ var (
 	redisPtr                 = flag.String("redis", defaultRedisEndpoint, "redis url string")
 	simEndpointPtr           = flag.String("sim-endpoint", defaultSimulationsEndpoint, "simulation endpoints (comma separated)")
 	workersPerNodePtr        = flag.String("workers-per-node", defaultWorkersPerNode, "number of workers per simulation node")
-	ethPtr                   = flag.String("eth", defaultEthEndpoint, "eth endpoint")
+	postgresDSNPtr           = flag.String("postgres-dsn", defaultPostgresDSN, "postgres dsn")
 	meVSimBundleRateLimitPtr = flag.String("mev-sim-bundle-rate-limit", defaultMevSimBundleRateLimit, "mev sim bundle rate limit for external users (calls per second)")
 	buildersConfigPtr        = flag.String("builders-config", defaultBuildersConfig, "builders config file")
 	shareGasUsedPtr          = flag.String("share-gas-used", defaultShareGasUsed, "share gas used in hints (0-1)")
@@ -65,6 +66,13 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if fileExists("./log/node.log") {
+		err1 := os.Remove("./log/node.log")
+		if err1 != nil {
+			panic(err1)
+		}
+	}
 
 	logger, _ := zap.NewDevelopment()
 	if *logProdPtr {
@@ -119,10 +127,16 @@ func main() {
 		logger.Fatal("Failed to load builders config", zap.Error(err))
 	}
 
+	// 数据库，应该是用来存储日志的
+	dbBackend, err := mevshare.NewDBBackend(*postgresDSNPtr)
+	if err != nil {
+		logger.Fatal("Failed to create postgres backend", zap.Error(err))
+	}
+
 	// bundle 模拟执行的api
 	shareGasUsed := *shareGasUsedPtr == "1"
 	shareMevGasPrice := *shareMevGasPricePtr == "1"
-	simResultBackend := mevshare.NewSimulationResultBackend(logger, hintBackend, buildersBackend, shareGasUsed, shareMevGasPrice)
+	simResultBackend := mevshare.NewSimulationResultBackend(logger, hintBackend, buildersBackend, dbBackend, shareGasUsed, shareMevGasPrice)
 
 	// 他喵的，这里应该是设置了很多队列，用于处理不同的模拟事件
 	redisQueue := simqueue.NewRedisQueue(logger, redisClient, "node")
@@ -153,17 +167,20 @@ func main() {
 	}
 
 	// 注册自己的 api 服务
-	api := mevshare.NewAPI(logger, simQueue, signer, simBackends, rate.Limit(rateLimit), buildersBackend, time.Millisecond*60)
+	api := mevshare.NewAPI(logger, simQueue, dbBackend, signer, simBackends, rate.Limit(rateLimit), buildersBackend, time.Millisecond*60)
 
 	jsonRPCServer, err := jsonrpcserver.NewHandler(jsonrpcserver.Methods{
-		mevshare.SendBundleEndpointName: api.SendBundle,
-		mevshare.SimBundleEndpointName:  api.SimBundle,
+		mevshare.SendBundleEndpointName:  api.SendBundle,
+		mevshare.SimBundleEndpointName:   api.SimBundle,
+		mevshare.ResetHeaderEndpointName: api.ResetHeader,
+		//mevshare.CancelBundleByHashEndpointName: api.CancelBundleByHash,
 	})
 	if err != nil {
 		logger.Fatal("Failed to create jsonrpc server", zap.Error(err))
 	}
 
 	http.Handle("/", jsonRPCServer)
+	sse_transfer.Init()
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", *portPtr),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -194,4 +211,16 @@ func main() {
 	// wait for queue to finish processing
 	queueWg.Wait()
 	backgroundWg.Wait()
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true // 文件存在
+	}
+	if os.IsNotExist(err) {
+		return false // 文件不存在
+	}
+	// 其他错误，例如权限问题，也认为文件存在与否不确定
+	return false
 }

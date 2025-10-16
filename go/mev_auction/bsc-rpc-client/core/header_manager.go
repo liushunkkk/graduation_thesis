@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+var GlobalIsBlock = false // 是否开启模拟搜索者阻塞
+
 // BlockNumberManager 负责维护全局的 block number
 type BlockNumberManager struct {
 	current uint64

@@ -104,6 +104,20 @@ func validateBundleInner(level int, bundle *SendMevBundleArgs, currentBlock uint
 	if bundle.Inclusion.MaxBlock == 0 {
 		bundle.Inclusion.MaxBlock = bundle.Inclusion.BlockNumber
 	}
+	minBlock := uint64(bundle.Inclusion.BlockNumber)
+	maxBlock := uint64(bundle.Inclusion.MaxBlock)
+	if maxBlock < minBlock {
+		return hash, txs, unmatched, ErrInvalidInclusion
+	}
+	if (maxBlock - minBlock) > MaxBlockRange {
+		return hash, txs, unmatched, ErrInvalidInclusion
+	}
+	if currentBlock >= maxBlock {
+		return hash, txs, unmatched, ErrInvalidInclusion
+	}
+	if minBlock > currentBlock+MaxBlockOffset {
+		return hash, txs, unmatched, ErrInvalidInclusion
+	}
 
 	// validate body
 	cleanBody(bundle)
@@ -163,16 +177,21 @@ func validateBundleInner(level int, bundle *SendMevBundleArgs, currentBlock uint
 		return hash, txs, unmatched, ErrInvalidBundleBodySize
 	}
 
-	if len(bodyHashes) == 1 {
-		// special case of bundle with a single tx
-		hash = bodyHashes[0]
-	} else {
-		hasher := sha3.NewLegacyKeccak256()
-		for _, h := range bodyHashes {
-			hasher.Write(h[:])
-		}
-		hash = common.BytesToHash(hasher.Sum(nil))
+	//if len(bodyHashes) == 1 {
+	//	// special case of bundle with a single tx
+	//	hash = bodyHashes[0]
+	//} else {
+	//	hasher := sha3.NewLegacyKeccak256()
+	//	for _, h := range bodyHashes {
+	//		hasher.Write(h[:])
+	//	}
+	//	hash = common.BytesToHash(hasher.Sum(nil))
+	//}
+	hasher := sha3.NewLegacyKeccak256()
+	for _, h := range bodyHashes {
+		hasher.Write(h[:])
 	}
+	hash = common.BytesToHash(hasher.Sum(nil))
 
 	// validate validity
 	if unmatched && len(bundle.Validity.Refund) > 0 {

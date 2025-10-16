@@ -114,6 +114,7 @@ type QueueItemInfo struct {
 type ProcessFunc func(ctx context.Context, data []byte, info QueueItemInfo) error
 
 type Queue interface {
+	UpdateBlock(block uint64) error
 	Push(ctx context.Context, data []byte, highPriority bool, minTargetBlock, maxTargetBlock uint64) error
 	StartProcessLoop(ctx context.Context, workers []ProcessFunc) *sync.WaitGroup
 }
@@ -157,7 +158,32 @@ func NewRedisQueue(log *zap.Logger, red *redis.Client, queueName string) *RedisQ
 	}
 }
 
+func (s *RedisQueue) UpdateBlock(block uint64) error {
+	current := atomic.LoadUint64(s.currentBlock)
+	if current == block {
+		return nil
+	}
+	if current > block {
+		return ErrBlockNumberIncorrect
+	}
+	s.log.Debug("updating block, sbundles for the next block will be processed", zap.Uint64("current", current), zap.Uint64("new", block), zap.Time("time", time.Now()))
+	atomic.StoreUint64(s.currentBlock, block)
+	return nil
+}
+
 func (s *RedisQueue) Push(ctx context.Context, data []byte, highPriority bool, minTargetBlock, maxTargetBlock uint64) error {
+	currentBlock := atomic.LoadUint64(s.currentBlock)
+
+	if maxTargetBlock <= currentBlock {
+		s.log.Debug("max target block is less than current block, skipping", zap.Uint64("max_target_block", maxTargetBlock), zap.Uint64("current_block", currentBlock))
+		return ErrStaleItem
+	}
+
+	// we schedule items for the next block
+	if nextBlock := currentBlock + 1; minTargetBlock < nextBlock {
+		minTargetBlock = nextBlock
+	}
+
 	args := packArgs{
 		data:           data,
 		minTargetBlock: minTargetBlock,

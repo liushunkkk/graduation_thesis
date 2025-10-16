@@ -57,7 +57,7 @@ func NewJSONRPCClient(url string) *JSONRPCClient {
 }
 
 // Call 发起 JSON-RPC 调用
-func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCResponse, error) {
+func (c *JSONRPCClient) Call(method string, params interface{}, userId int) (*JSONRPCResponse, error) {
 	start := time.Now()
 	rawParams, err := encodeParams(params)
 	if err != nil {
@@ -85,7 +85,7 @@ func (c *JSONRPCClient) Call(method string, params interface{}) (*JSONRPCRespons
 
 	end := time.Now()
 
-	zap_logger.Zap.Info(fmt.Sprintf("[call-%s]", method), zap.Any("cost", end.Sub(start).Microseconds()))
+	zap_logger.Zap.Info(fmt.Sprintf("[call-%s]", method), zap.Any("userId", userId), zap.Any("cost", end.Sub(start).Microseconds()))
 
 	if rpcResp.Error != nil {
 		return &rpcResp, fmt.Errorf("RPC error: %d - %s", rpcResp.Error.Code, rpcResp.Error.Message)
@@ -108,7 +108,7 @@ func encodeParams(params interface{}) ([]json.RawMessage, error) {
 
 // SendMevBundle 发送一组 MEV bundle
 func (c *JSONRPCClient) SendMevBundle(args *model.SendMevBundleArgs) (*model.SendMevBundleResponse, error) {
-	resp, err := c.Call(SendMevBundleEndpointName, args)
+	resp, err := c.Call(SendMevBundleEndpointName, args, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (c *JSONRPCClient) SendMevBundle(args *model.SendMevBundleArgs) (*model.Sen
 
 // SendRawTransaction 发送原始交易
 func (c *JSONRPCClient) SendRawTransaction(args *model.SendRawTransactionArgs) (*model.SendRawTransactionResponse, error) {
-	resp, err := c.Call(SendRawTransactionEndpointName, args)
+	resp, err := c.Call(SendRawTransactionEndpointName, args, args.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (c *JSONRPCClient) ResetHeader(blockNumber uint64) error {
 	resp, err := c.Call(ResetHeaderEndpointName, &model.ResetHeaderArgs{
 		HeaderNumber: blockNumber,
 		Time:         uint64(time.Now().Unix()),
-	})
+	}, 0)
 	if err != nil {
 		return fmt.Errorf("ResetHeader 调用失败: %w", err)
 	}

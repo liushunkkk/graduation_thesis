@@ -13,6 +13,7 @@ type BuilderParam struct {
 }
 
 type Param struct {
+	UserId             int
 	Txs                []string      `json:"txs"`
 	MaxBlockNumber     uint64        `json:"maxBlockNumber,omitempty"`
 	BlockNumber        string        `json:"blockNumber,omitempty"`

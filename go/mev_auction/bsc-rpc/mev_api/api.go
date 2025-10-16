@@ -46,6 +46,7 @@ func NewAPI(pool *bundlepool.BundlePool) *API {
 
 type SendRawTransactionArgs struct {
 	Input          hexutil.Bytes
+	UserId         int
 	MaxBlockNumber uint64
 }
 
@@ -86,11 +87,11 @@ func (a *API) SendRawTransaction(ctx context.Context, input SendRawTransactionAr
 	if err := tx.UnmarshalBinary(input.Input); err != nil {
 		return EmptyRawResponse, err
 	}
-	return SubmitTransaction(ctx, a, tx, input.MaxBlockNumber)
+	return SubmitTransaction(ctx, a, tx, input.MaxBlockNumber, input.UserId)
 }
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
-func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBlockNumber uint64) (SendRawTransactionResponse, error) {
+func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBlockNumber uint64, userId int) (SendRawTransactionResponse, error) {
 	//remoteAddr := ctx.Value("remote").(string)
 	//split := strings.Split(remoteAddr, ":")
 	//if len(split) == 2 {
@@ -119,6 +120,7 @@ func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBl
 	}
 
 	bundle := &base.Bundle{
+		UserId:            userId,
 		ParentHash:        common.Hash{},
 		Txs:               []*types.Transaction{tx},
 		MaxBlockNumber:    maxBlockNumber,

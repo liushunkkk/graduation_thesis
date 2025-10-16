@@ -58,7 +58,7 @@ func (bloxroute *Bloxroute) SendBundle(param define.Param, hash common.Hash) {
 	data, _ := json.Marshal(bd)
 	cost := time.Now().Sub(param.ArrivalTime).Microseconds()
 
-	zap_logger.Zap.Info("[bloxroute-send]", zap.Any("hash", hash), zap.Any("cost", cost), zap.Any("txs", len(param.Txs)))
+	zap_logger.Zap.Info("[bloxroute-send]", zap.Any("hash", hash), zap.Any("cost", cost), zap.Any("txs", len(param.Txs)), zap.Any("userId", param.UserId))
 	time.Sleep(20 * time.Millisecond)
 	return
 

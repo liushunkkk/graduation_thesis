@@ -3,7 +3,11 @@ package mevshare
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/flashbots/mev-share-node/zap_logger"
+	"go.uber.org/zap"
+	"math/big"
 	"math/rand"
 	"time"
 
@@ -29,13 +33,11 @@ type SimulationBackend interface {
 }
 
 type JSONRPCSimulationBackend struct {
-	client jsonrpc.RPCClient
 }
 
 // NewJSONRPCSimulationBackend 创建 jsonrpc 的连客户端连接
 func NewJSONRPCSimulationBackend(url string) *JSONRPCSimulationBackend {
 	return &JSONRPCSimulationBackend{
-		client: jsonrpc.NewClient(url),
 		// todo here use optsx
 	}
 }
@@ -74,16 +76,74 @@ func replaceRevertModeForSimulation(bundle *SendMevBundleArgs) *SendMevBundleArg
 func (b *JSONRPCSimulationBackend) SimulateBundle(ctx context.Context, bundle *SendMevBundleArgs, aux *SimMevBundleAuxArgs) (*SimMevBundleResponse, error) {
 	var result SimMevBundleResponse
 	// we need a hack here until mev_simBundle supports revertMode, we will treat revertMode=drop as canRevert=true so that bundle passes simulation
-	newBundle := replaceRevertModeForSimulation(bundle)
-	if newBundle.Body[0].Bundle != nil {
+	_ = replaceRevertModeForSimulation(bundle)
+	if len(bundle.Body) >= 2 {
 		time.Sleep(30 * time.Millisecond)
+		result.Profit = hexutil.Big(*big.NewInt(int64(200 + rand.Intn(100))))
 	} else {
 		time.Sleep(20 * time.Millisecond)
-	}
-	if n := rand.Intn(100); n > 90 {
-		return &result, errors.New("SimulationBackend: unable to simulate bundle")
+		result.Profit = hexutil.Big(*big.NewInt(int64(100 + rand.Intn(100))))
 	}
 	result.Success = true
+	result.StateBlock = hexutil.Uint64(CurrentHeader.Number.Uint64())
+	result.GasUsed = hexutil.Uint64(rand.Uint64())
+	result.MevGasPrice = hexutil.Big(*big.NewInt(int64(rand.Intn(1000000))))
+	if len(bundle.Body) > 1 {
+		result.BodyLogs = []SimMevBodyLogs{
+			{
+				BundleLogs: make([]SimMevBodyLogs, 0),
+			},
+			{
+				TxLogs: []*types.Log{
+					{
+						Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+					},
+				},
+			},
+		}
+		if len(bundle.Body[0].Bundle.Body) > 1 {
+			result.BodyLogs[0].BundleLogs = []SimMevBodyLogs{
+				{
+					BundleLogs: []SimMevBodyLogs{
+						{
+							TxLogs: []*types.Log{
+								{
+									Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+								},
+							},
+						},
+					},
+				},
+				{
+					TxLogs: []*types.Log{
+						{
+							Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+						},
+					},
+				},
+			}
+		} else {
+			result.BodyLogs[0].BundleLogs = []SimMevBodyLogs{
+				{
+					TxLogs: []*types.Log{
+						{
+							Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+						},
+					},
+				},
+			}
+		}
+	} else {
+		result.BodyLogs = []SimMevBodyLogs{
+			{
+				TxLogs: []*types.Log{
+					{
+						Address: common.HexToAddress("0x0000000000000000000000000000000000000000"),
+					},
+				},
+			},
+		}
+	}
 	//err := b.client.CallFor(ctx, &result, "mev_simBundle", newBundle, aux)
 	return &result, nil
 }
@@ -105,6 +165,7 @@ func (b *RedisHintBackend) NotifyHint(ctx context.Context, hint *Hint) error {
 	if err != nil {
 		return err
 	}
+	zap_logger.Zap.Info("push to redis", zap.Any("channel", b.pubChannel))
 	return b.client.Publish(ctx, b.pubChannel, data).Err()
 }
 

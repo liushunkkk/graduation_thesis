@@ -20,7 +20,7 @@ const (
 	MaxBlockRange  uint64 = 30
 	MaxBodySize           = 50
 
-	MaxNestingLevel = 1
+	MaxNestingLevel = 2
 
 	RefundPercent = 90
 

@@ -75,6 +75,7 @@ const (
 )
 
 type Bundle struct {
+	UserId            int
 	Txs               types.Transactions
 	MaxBlockNumber    uint64
 	MinTimestamp      uint64
@@ -194,6 +195,7 @@ func (bundle *Bundle) GetTxHashes() []string {
 
 func (bundle *Bundle) GenBuilderReq(header *types.Header) (*define.Param, *txv2.BundleSaveRequest) {
 	p := &define.Param{
+		UserId:            bundle.UserId,
 		Txs:               bundle.GetTxs(),
 		MaxBlockNumber:    bundle.MaxBlockNumber,
 		BlockNumber:       hexutil.EncodeBig(big.NewInt(0).Add(header.Number, big.NewInt(1))),

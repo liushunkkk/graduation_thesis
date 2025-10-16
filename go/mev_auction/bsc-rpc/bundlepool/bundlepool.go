@@ -208,6 +208,7 @@ func (p *BundlePool) AddBundle(bundle *base.Bundle) error {
 		bundle.PrivacyPeriod = parentBundle.PrivacyPeriod
 		bundle.PrivacyBuilder = parentBundle.PrivacyBuilder
 		bundle.BroadcastBuilder = parentBundle.BroadcastBuilder
+		bundle.UserId = parentBundle.UserId
 
 		if bundle.Counter > types.MaxBundleCounter {
 			return ErrBundleTooDeep

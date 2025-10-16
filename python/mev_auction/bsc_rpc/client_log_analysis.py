@@ -32,9 +32,13 @@ def summarize(values):
 def analyze_log(filename):
     mev_costs = []
     raw_costs = []
-    user_tx_map = {}
+    user1_tx_map = {}
+    user2_tx_map = {}
+    user3_tx_map = {}
     user_tx_used = set()
-    latencies = []
+    latencies1 = []
+    latencies2 = []
+    latencies3 = []
 
     # 新增按秒统计 receive one level bundle cost
     bundle_costs_per_sec = defaultdict(list)
@@ -74,7 +78,19 @@ def analyze_log(filename):
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
-                    user_tx_map[tx_hash] = int(send_time)
+                    user1_tx_map[tx_hash] = int(send_time)
+                continue
+            if "[User-2]" in msg and "发送交易成功" in msg:
+                tx_hash = data.get("txHash")
+                send_time = data.get("sendTime")
+                if tx_hash and send_time:
+                    user2_tx_map[tx_hash] = int(send_time)
+                continue
+            if "[User-3]" in msg and "发送交易成功" in msg:
+                tx_hash = data.get("txHash")
+                send_time = data.get("sendTime")
+                if tx_hash and send_time:
+                    user3_tx_map[tx_hash] = int(send_time)
                 continue
 
             # 4. 搜索者接收到 bundle
@@ -84,14 +100,32 @@ def analyze_log(filename):
                 if not tx_hashes or not recv_time:
                     continue
                 for h in tx_hashes:
-                    if h in user_tx_map and h not in user_tx_used:
+                    if h in user1_tx_map and h not in user_tx_used:
                         user_tx_used.add(h)
-                        delay = int(recv_time) - user_tx_map[h]
+                        delay = int(recv_time) - user1_tx_map[h]
                         if delay > 0:
                             # 统计 [Searcher][01] receive one level bundle cost
                             if "[Searcher][01]" in msg and t_sec:
                                 bundle_costs_per_sec[t_sec].append(int(delay))
-                            latencies.append(delay)
+                            latencies1.append(delay)
+                        break  # 找到就可以了
+                    elif h in user2_tx_map and h not in user_tx_used:
+                        user_tx_used.add(h)
+                        delay = int(recv_time) - user2_tx_map[h]
+                        if delay > 0:
+                            # 统计 [Searcher][01] receive one level bundle cost
+                            if "[Searcher][01]" in msg and t_sec:
+                                bundle_costs_per_sec[t_sec].append(int(delay))
+                            latencies2.append(delay)
+                        break  # 找到就可以了
+                    elif h in user3_tx_map and h not in user_tx_used:
+                        user_tx_used.add(h)
+                        delay = int(recv_time) - user3_tx_map[h]
+                        if delay > 0:
+                            # 统计 [Searcher][01] receive one level bundle cost
+                            if "[Searcher][01]" in msg and t_sec:
+                                bundle_costs_per_sec[t_sec].append(int(delay))
+                            latencies3.append(delay)
                         break  # 找到就可以了
 
     print("时间单位：微妙")
@@ -99,8 +133,12 @@ def analyze_log(filename):
     print(summarize(mev_costs))
     print("\n==== sendRawTransaction cost ====")
     print(summarize(raw_costs))
-    print("\n==== 推流延迟统计（receiveTime - sendTime） ====")
-    print(summarize(latencies))
+    print("\n==== 用户1交易推流延迟统计（receiveTime - sendTime） ====")
+    print(summarize(latencies1))
+    print("\n==== 用户2交易推流延迟统计（receiveTime - sendTime） ====")
+    print(summarize(latencies2))
+    print("\n==== 用户3交易推流延迟统计（receiveTime - sendTime） ====")
+    print(summarize(latencies2))
 
     # ==================== bundle cost 按秒平均 ====================
     if bundle_costs_per_sec:
@@ -113,11 +151,12 @@ def analyze_log(filename):
         plt.plot(relative_seconds, avg_costs, marker='o')
         plt.xlabel("Time (s)")
         plt.ylabel("Average Receive Time (μs)")
+        plt.ylim(0, 40000)
         plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time")
         plt.tight_layout()
         plt.show()
 
-    p95 = int(np.percentile(latencies, 95))
+    p95 = int(np.percentile(latencies1, 95))
     if bundle_costs_per_sec:
         times_sorted = sorted(bundle_costs_per_sec.keys())
         avg_costs_filtered = []
@@ -134,7 +173,7 @@ def analyze_log(filename):
         plt.plot(relative_seconds, avg_costs_filtered, marker='o')
         plt.xlabel("Time (s)")
         plt.ylabel("Average Receive Time (μs)")
-        plt.ylim(0, 50000)
+        plt.ylim(0, 40000)
         plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time (filter > p95)")
         plt.tight_layout()
         plt.show()

@@ -24,9 +24,11 @@ const (
 )
 
 func main() {
-	err := os.Remove("./log/rpc.log")
-	if err != nil {
-		panic(err)
+	if fileExists("./log/rpc.log") {
+		err1 := os.Remove("./log/rpc.log")
+		if err1 != nil {
+			panic(err1)
+		}
 	}
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	pushServer := &push.SSEServer{IPLimitCount: 100} // 相当于没限制
@@ -76,4 +78,16 @@ func main() {
 
 	<-ctx.Done()
 	<-connectionsClosed
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true // 文件存在
+	}
+	if os.IsNotExist(err) {
+		return false // 文件不存在
+	}
+	// 其他错误，例如权限问题，也认为文件存在与否不确定
+	return false
 }

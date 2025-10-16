@@ -16,17 +16,19 @@ type User struct {
 	id      int
 	rpc     *client.JSONRPCClient
 	txCount int
+	ticker  int
 }
 
-func NewUser(id int, rpcURL string) *User {
+func NewUser(id int, rpcURL string, ticker int) *User {
 	return &User{
-		id:  id,
-		rpc: client.NewJSONRPCClient(rpcURL),
+		id:     id,
+		rpc:    client.NewJSONRPCClient(rpcURL),
+		ticker: ticker,
 	}
 }
 
 func (u *User) Start(ctx context.Context) {
-	ticker := time.NewTicker(20 * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(u.ticker-10) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -34,6 +36,7 @@ func (u *User) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			time.Sleep(10 * time.Millisecond)
 			u.sendTransaction()
 		}
 	}
@@ -55,7 +58,8 @@ func (u *User) sendTransaction() {
 
 	args := &model.SendRawTransactionArgs{
 		Input:          input,
-		MaxBlockNumber: GlobalBlockManager.GetCurrentBlock() + 2,
+		UserId:         u.id,
+		MaxBlockNumber: GlobalBlockManager.GetCurrentBlock() + 1,
 	}
 
 	resp, err := u.rpc.SendRawTransaction(args)
@@ -73,7 +77,7 @@ func (u *User) sendTransaction() {
 func InitUser(ctx context.Context, num int) {
 	rpcURL := "http://localhost:8080"
 	for i := 1; i <= num; i++ {
-		user := NewUser(i, rpcURL)
+		user := NewUser(i, rpcURL, i*50)
 		go user.Start(ctx)
 	}
 }

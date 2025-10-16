@@ -49,6 +49,7 @@ type SendMevBundleResponse struct {
 
 type SendRawTransactionArgs struct {
 	Input          hexutil.Bytes
+	UserId         int
 	MaxBlockNumber uint64
 }
 

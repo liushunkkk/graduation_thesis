@@ -1,10 +1,21 @@
 package mevshare
 
 import (
-	"github.com/ethereum/go-ethereum/params"
+	"context"
+	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/params"
 )
+
+var CurrentHeader *types.Header = &types.Header{
+	Number: big.NewInt(100),
+	Time:   uint64(time.Now().Unix()),
+}
 
 var (
 	ethDivisor  = new(big.Float).SetUint64(params.Ether)
@@ -24,6 +35,44 @@ func formatUnits(value *big.Int, unit string) string {
 	default:
 		return ""
 	}
+}
+
+type EthCachingClient struct {
+	ethClient   *ethclient.Client
+	mu          sync.RWMutex
+	blockNumber uint64
+	lastUpdate  time.Time
+}
+
+func NewCachingEthClient(ethClient *ethclient.Client) *EthCachingClient {
+	return &EthCachingClient{
+		ethClient:   ethClient,
+		mu:          sync.RWMutex{},
+		blockNumber: 0,
+		lastUpdate:  time.Now().Add(-10 * time.Second),
+	}
+}
+
+// BlockNumber returns the most recent block number, cached for 5 seconds
+func (c *EthCachingClient) BlockNumber(ctx context.Context) (uint64, error) {
+	c.mu.RLock()
+	if time.Since(c.lastUpdate) < 5*time.Second {
+		c.mu.RUnlock()
+		return c.blockNumber, nil
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	blockNumber, err := c.ethClient.BlockNumber(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	c.blockNumber = blockNumber
+	c.lastUpdate = time.Now()
+	return blockNumber, nil
 }
 
 // Intersect returns the intersection of two string arrays, without duplicates

@@ -3,6 +3,8 @@ package mevshare
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/flashbots/mev-share-node/zap_logger"
 	"strings"
 	"sync"
 	"time"
@@ -57,31 +59,23 @@ type BuildersConfig struct {
 // 构造者的信息都是从 builders.yaml 配置文件中读取的
 // 现在的配置中其实只有一个internal builder，没有其他的builder了
 func LoadBuilderConfig(file string) (BuildersBackend, error) {
+	internalBuilders := make([]JSONRPCBuilderBackend, 0)
+	for _, builder := range []string{"blockrazor", "48club", "blocksmith", "blockxroute"} {
+		api, err := parseBuilderAPI("refund-recipient")
+		if err != nil {
+			return BuildersBackend{}, err
+		}
+
+		builderBackend := JSONRPCBuilderBackend{
+			Name:   strings.ToLower(builder),
+			Client: nil,
+			API:    api,
+		}
+		internalBuilders = append(internalBuilders, builderBackend)
+	}
+
 	return BuildersBackend{
-		externalBuilders: map[string]JSONRPCBuilderBackend{},
-		internalBuilders: []JSONRPCBuilderBackend{
-			{
-				Name:  "blockrazor",
-				API:   BuilderAPIRefundRecipient,
-				Delay: false,
-			},
-			{
-				Name:  "48club",
-				API:   BuilderAPIRefundRecipient,
-				Delay: false,
-			},
-			{
-				Name:  "blocksmith",
-				API:   BuilderAPIRefundRecipient,
-				Delay: false,
-			},
-			{
-				Name:  "blockxroute",
-				API:   BuilderAPIRefundRecipient,
-				Delay: false,
-			},
-		},
-		RestrictedAddress: "",
+		internalBuilders: internalBuilders,
 	}, nil
 }
 
@@ -98,10 +92,14 @@ func (b *JSONRPCBuilderBackend) SendBundle(ctx context.Context, bundle *SendMevB
 		// eth_sendBundle 只有一个refund结果，那就是第一个交易的第一个sender
 		// 返回的 refund.percent 或 refund.percent * refundConfig[0].percent
 		// 这个是最开始的 api 版本
-		_, err := ConvertBundleToRefundRecipient(bundle)
+		refRec, err := ConvertBundleToRefundRecipient(bundle)
 		if err != nil {
 			return err
 		}
+		cost := time.Now().Sub(bundle.ArrivalTime).Microseconds()
+
+		zap_logger.Zap.Info(fmt.Sprintf("[%s-send]", b.Name), zap.Any("hash", bundle.Metadata.BundleHash.Hex()), zap.Any("cost", cost), zap.Any("txs", len(refRec.Txs)), zap.Any("userId", bundle.UserId))
+
 		time.Sleep(20 * time.Millisecond)
 		//res, err := b.Client.Call(ctx, "eth_sendBundle", []SendRefundRecBundleArgs{refRec})
 		//if err != nil {
@@ -112,21 +110,21 @@ func (b *JSONRPCBuilderBackend) SendBundle(ctx context.Context, bundle *SendMevB
 		//}
 		// 后面这两个应该是新的 api 现在是这个为标准
 	case BuilderAPIMevShareBeta1:
-		//res, err := b.Client.Call(ctx, "mev_sendBundle", []SendMevBundleArgs{*bundle})
-		//if err != nil {
-		//	return err
-		//}
-		//if res.Error != nil {
-		//	return res.Error
-		//}
+		res, err := b.Client.Call(ctx, "mev_sendBundle", []SendMevBundleArgs{*bundle})
+		if err != nil {
+			return err
+		}
+		if res.Error != nil {
+			return res.Error
+		}
 	case BuilderAPIMevShareBeta1Replacement:
-		//res, err := b.Client.Call(ctx, "mev_sendBundle", []SendMevBundleArgs{*bundle})
-		//if err != nil {
-		//	return err
-		//}
-		//if res.Error != nil {
-		//	return res.Error
-		//}
+		res, err := b.Client.Call(ctx, "mev_sendBundle", []SendMevBundleArgs{*bundle})
+		if err != nil {
+			return err
+		}
+		if res.Error != nil {
+			return res.Error
+		}
 	}
 	return nil
 }
@@ -178,13 +176,16 @@ func (b *BuildersBackend) SendBundle(ctx context.Context, logger *zap.Logger, bu
 
 	// for internal builders send signing_address
 	iArgs := &SendMevBundleArgs{
+		UserId:          bundle.UserId,
 		Version:         args.Version,
+		ArrivalTime:     bundle.ArrivalTime,
 		Inclusion:       args.Inclusion,
 		Body:            args.Body,
 		Validity:        args.Validity,
 		Privacy:         args.Privacy,
 		ReplacementUUID: bundle.ReplacementUUID,
 		Metadata: &MevBundleMetadata{
+			BundleHash:       bundle.Metadata.BundleHash,
 			Signer:           signingAddress,
 			ReplacementNonce: bundle.Metadata.ReplacementNonce,
 			Cancelled:        shouldCancel,
@@ -214,10 +215,10 @@ func (b *BuildersBackend) SendBundle(ctx context.Context, logger *zap.Logger, bu
 				return
 			}
 
-			start := time.Now()
+			//start := time.Now()
 			err := builder.SendBundle(ctx, iArgs)
 			now := time.Now()
-			logger.Debug("Sent bundle to internal builder", zap.String("builder", builder.Name), zap.Duration("duration", time.Since(start)), zap.Error(err), zap.Time("time", now), zap.Int64("timestamp", now.Unix()))
+			//logger.Debug("Sent bundle to internal builder", zap.String("builder", builder.Name), zap.Duration("duration", time.Since(start)), zap.Error(err), zap.Time("time", now), zap.Int64("timestamp", now.Unix()))
 
 			if err != nil {
 				logger.Warn("Failed to send bundle to internal builder", zap.Error(err), zap.String("builder", builder.Name), zap.Time("time", now), zap.Int64("timestamp", now.Unix()))

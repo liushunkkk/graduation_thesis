@@ -3,6 +3,7 @@ package mevshare
 import (
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -18,6 +19,7 @@ var (
 const (
 	SendBundleEndpointName         = "mev_sendBundle"
 	SimBundleEndpointName          = "mev_simBundle"
+	ResetHeaderEndpointName        = "mev_resetHeader"
 	CancelBundleByHashEndpointName = "mev_cancelBundleByHash"
 )
 
@@ -120,6 +122,7 @@ const (
 )
 
 type SendMevBundleArgs struct {
+	UserId          int                `json:"userId"`
 	Version         string             `json:"version"`
 	ReplacementUUID string             `json:"replacementUuid,omitempty"`
 	Inclusion       MevBundleInclusion `json:"inclusion"`
@@ -127,6 +130,7 @@ type SendMevBundleArgs struct {
 	Validity        MevBundleValidity  `json:"validity"`
 	Privacy         *MevBundlePrivacy  `json:"privacy,omitempty"`
 	Metadata        *MevBundleMetadata `json:"metadata,omitempty"`
+	ArrivalTime     time.Time          `json:"arrivalTime"`
 }
 
 type ReplacementData struct {
