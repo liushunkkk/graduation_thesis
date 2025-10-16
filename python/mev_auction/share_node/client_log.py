@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from matplotlib import pyplot as plt
 
+lab = "high_lab_log_files"
 
 def parse_log_line(line):
     try:
@@ -68,19 +69,19 @@ def analyze_log(filename):
                 continue
 
             # 3. 用户发送成功
-            if "[User-1]" in msg and "发送交易成功" in msg:
+            if "[User-1]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
                     user1_tx_map[tx_hash] = int(send_time)
                 continue
-            if "[User-2]" in msg and "发送交易成功" in msg:
+            if "[User-2]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
                     user2_tx_map[tx_hash] = int(send_time)
                 continue
-            if "[User-3]" in msg and "发送交易成功" in msg:
+            if "[User-3]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
@@ -143,7 +144,7 @@ def analyze_log(filename):
         plt.plot(relative_seconds, avg_costs, marker='o')
         plt.xlabel("Time (s)")
         plt.ylabel("Average Receive Time (μs)")
-        plt.ylim(0, 90000)
+        # plt.ylim(0, 90000)
         plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time")
         plt.tight_layout()
         plt.show()
@@ -165,11 +166,11 @@ def analyze_log(filename):
         plt.plot(relative_seconds, avg_costs_filtered, marker='o')
         plt.xlabel("Time (s)")
         plt.ylabel("Average Receive Time (μs)")
-        plt.ylim(0, 90000)
+        # plt.ylim(0, 90000)
         plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time (filter > p95)")
         plt.tight_layout()
         plt.show()
 
 
 if __name__ == "__main__":
-    analyze_log("../log_files/share-node-client.log")
+    analyze_log(f"../{lab}/share-node-client.log")

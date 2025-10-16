@@ -29,7 +29,7 @@ func NewUser(id int, rpcURL string, ticker int) *User {
 }
 
 func (u *User) Start(ctx context.Context) {
-	ticker := time.NewTicker(time.Duration(u.ticker-10) * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(u.ticker-5) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -75,6 +75,7 @@ func (u *User) sendTransaction() {
 		Metadata: &model.MevBundleMetadata{Signer: common.HexToAddress("0x6927b1FF9E8ef81F58f457d87d775b1f44d72027")},
 	}
 
+	zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 开始发送交易 #%d", u.id, u.txCount), zap.Any("sendTime", time.Now().UnixMicro()), zap.Any("txHash", tx.Hash().Hex()))
 	resp, err := u.rpc.SendMevBundle(args)
 	if err != nil {
 		zap_logger.Zap.Info(fmt.Sprintf("[User-%d] 发送交易失败: %v", u.id, err))
@@ -87,10 +88,15 @@ func (u *User) sendTransaction() {
 	}
 }
 
-func InitUser(ctx context.Context, num int) {
+func InitUser(ctx context.Context, num int, highStream bool) {
 	rpcURL := "http://localhost:8080"
 	for i := 1; i <= num; i++ {
-		user := NewUser(i, rpcURL, 50*i)
+		var user *User
+		if highStream && i == 1 {
+			user = NewUser(i, rpcURL, i*20)
+		} else {
+			user = NewUser(i, rpcURL, i*50)
+		}
 		go user.Start(ctx)
 	}
 }

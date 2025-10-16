@@ -5,6 +5,8 @@ from collections import defaultdict
 
 from matplotlib import pyplot as plt
 
+lab = "high_lab_log_files"
+
 
 def parse_log_line(line):
     try:
@@ -42,6 +44,7 @@ def analyze_log(filename):
 
     # 新增按秒统计 receive one level bundle cost
     bundle_costs_per_sec = defaultdict(list)
+    bundle_costs_per_sec_compare = defaultdict(list)
 
     with open(filename, "r", encoding="utf-8") as f:
         for line in f:
@@ -74,19 +77,19 @@ def analyze_log(filename):
                 continue
 
             # 3. 用户发送成功
-            if "[User-1]" in msg and "发送交易成功" in msg:
+            if "[User-1]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
                     user1_tx_map[tx_hash] = int(send_time)
                 continue
-            if "[User-2]" in msg and "发送交易成功" in msg:
+            if "[User-2]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
                     user2_tx_map[tx_hash] = int(send_time)
                 continue
-            if "[User-3]" in msg and "发送交易成功" in msg:
+            if "[User-3]" in msg and "开始发送交易" in msg:
                 tx_hash = data.get("txHash")
                 send_time = data.get("sendTime")
                 if tx_hash and send_time:
@@ -107,6 +110,8 @@ def analyze_log(filename):
                             # 统计 [Searcher][01] receive one level bundle cost
                             if "[Searcher][01]" in msg and t_sec:
                                 bundle_costs_per_sec[t_sec].append(int(delay))
+                            elif "[Searcher][06]" in msg and t_sec:
+                                bundle_costs_per_sec_compare[t_sec].append(int(delay))
                             latencies1.append(delay)
                         break  # 找到就可以了
                     elif h in user2_tx_map and h not in user_tx_used:
@@ -116,6 +121,8 @@ def analyze_log(filename):
                             # 统计 [Searcher][01] receive one level bundle cost
                             if "[Searcher][01]" in msg and t_sec:
                                 bundle_costs_per_sec[t_sec].append(int(delay))
+                            elif "[Searcher][06]" in msg and t_sec:
+                                bundle_costs_per_sec_compare[t_sec].append(int(delay))
                             latencies2.append(delay)
                         break  # 找到就可以了
                     elif h in user3_tx_map and h not in user_tx_used:
@@ -125,6 +132,8 @@ def analyze_log(filename):
                             # 统计 [Searcher][01] receive one level bundle cost
                             if "[Searcher][01]" in msg and t_sec:
                                 bundle_costs_per_sec[t_sec].append(int(delay))
+                            elif "[Searcher][06]" in msg and t_sec:
+                                bundle_costs_per_sec_compare[t_sec].append(int(delay))
                             latencies3.append(delay)
                         break  # 找到就可以了
 
@@ -143,16 +152,20 @@ def analyze_log(filename):
     # ==================== bundle cost 按秒平均 ====================
     if bundle_costs_per_sec:
         times_sorted = sorted(bundle_costs_per_sec.keys())
-        avg_costs = [np.mean(bundle_costs_per_sec[t]) for t in times_sorted]
+        avg_costs = [np.mean(bundle_costs_per_sec[t]) // 1000 for t in times_sorted]
+        # times_sorted = sorted(bundle_costs_per_sec_compare.keys())
+        avg_costs_compare = [np.mean(bundle_costs_per_sec_compare[t]) // 1000 for t in times_sorted]
 
         # 生成从 0 开始的相对秒数
         relative_seconds = [(t - times_sorted[0]).total_seconds() for t in times_sorted]
         plt.figure(figsize=(12, 5))
-        plt.plot(relative_seconds, avg_costs, marker='o')
+        plt.plot(relative_seconds, avg_costs, label='searcher-01', marker='o')
+        plt.plot(relative_seconds, avg_costs_compare, label='searcher-06', marker='o')
         plt.xlabel("Time (s)")
-        plt.ylabel("Average Receive Time (μs)")
-        plt.ylim(0, 40000)
-        plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time")
+        plt.ylabel("Average Receive Time (ms)")
+        plt.ylim(0, 100)
+        plt.title("[Searcher] Receive User Transaction Stream Wait Over Time")
+        plt.legend()
         plt.tight_layout()
         plt.show()
 
@@ -167,17 +180,17 @@ def analyze_log(filename):
             if len(costs) == 0:
                 avg_costs_filtered.append(np.nan)
             else:
-                avg_costs_filtered.append(np.mean(costs))
+                avg_costs_filtered.append(np.mean(costs) // 1000)
         relative_seconds = [(t - times_sorted[0]).total_seconds() for t in times_sorted]
         plt.figure(figsize=(12, 5))
         plt.plot(relative_seconds, avg_costs_filtered, marker='o')
         plt.xlabel("Time (s)")
-        plt.ylabel("Average Receive Time (μs)")
-        plt.ylim(0, 40000)
+        plt.ylabel("Average Receive Time (ms)")
+        plt.ylim(0, 100)
         plt.title("[Searcher][01] Receive User Transaction Stream Wait Over Time (filter > p95)")
         plt.tight_layout()
         plt.show()
 
 
 if __name__ == "__main__":
-    analyze_log("../log_files/bsc-rpc-client.log")
+    analyze_log(f"../{lab}/bsc-rpc-client.log")

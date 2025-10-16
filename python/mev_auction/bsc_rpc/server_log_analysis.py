@@ -69,10 +69,16 @@ if __name__ == '__main__':
         plt.plot(relative_seconds, groups, label="Group Size")
         plt.plot(relative_seconds, bundles, label="Bundle Size")
         plt.xlabel("Time(s)")
+        plt.xlim(0, 220)
         plt.ylabel("Size")
         plt.title("Pool-State Over Time")
-        plt.legend()
-        plt.tight_layout()
+        plt.legend(
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1),  # 调整位置：x>1表示右移到图外
+            borderaxespad=0,
+            frameon=False
+        )
+        plt.tight_layout(rect=[0, 0, 0.85, 1])  # 为图例留出右边空间
         plt.show()
 
 

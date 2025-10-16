@@ -4,9 +4,11 @@ from collections import defaultdict, Counter
 import numpy as np
 import matplotlib.pyplot as plt
 
+lab = "high_lab_log_files"
+
 if __name__ == '__main__':
 
-    log_file = "../log_files/share-node.log"
+    log_file = f"../{lab}/share-node.log"
 
     # 数据存储
     send_costs = defaultdict(list)

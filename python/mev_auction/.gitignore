@@ -2,3 +2,6 @@
 .idea
 .venv
 log_files
+base_lab_log_files
+error_lab_log_files
+high_lab_log_files

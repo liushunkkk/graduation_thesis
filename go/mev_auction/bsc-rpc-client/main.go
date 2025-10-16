@@ -20,11 +20,11 @@ func main() {
 	// 先让区块同步好，然后再开始发送交易
 
 	time.Sleep(10 * time.Second)
-	err := core.UserTxLoader.LoadFromDB(10000)
+	err := core.UserTxLoader.LoadFromDB(20000)
 	if err != nil {
 		panic(err)
 	}
-	err = core.SearcherTxLoader.LoadFromDB(30000)
+	err = core.SearcherTxLoader.LoadFromDB(60000)
 	if err != nil {
 		panic(err)
 	}
@@ -36,10 +36,15 @@ func main() {
 			core.GlobalIsBlock = true
 		}()
 	}
+	highStream := true // 是否开启模拟某用户高并发
 	core.InitSearcher(cancelCtx, 2, openBlock)
-	core.InitUser(cancelCtx, 3)
+	core.InitUser(cancelCtx, 3, highStream)
 
-	time.Sleep(3 * time.Minute)
+	if highStream {
+		time.Sleep(1 * time.Minute)
+	} else {
+		time.Sleep(3 * time.Minute)
+	}
 
 	cancel() // 停止所有用户和搜索者
 

@@ -31,9 +31,14 @@ func main() {
 		panic(err)
 	}
 
-	core.InitUser(cancelCtx, 3)
+	highStream := true // 是否开启模拟某用户高并发
+	core.InitUser(cancelCtx, 3, highStream)
 
-	time.Sleep(3 * time.Minute)
+	if highStream {
+		time.Sleep(1 * time.Minute)
+	} else {
+		time.Sleep(3 * time.Minute)
+	}
 
 	cancel() // 停止所有用户和搜索者
 
