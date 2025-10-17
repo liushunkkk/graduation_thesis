@@ -2,7 +2,7 @@ import os
 import shutil
 
 if __name__ == '__main__':
-    lab = "high_lab_log_files"
+    lab = "error_10s_lab_log_files"
     os.makedirs(lab, exist_ok=True)
     src_file = "/Users/liushun/Documents/毕业论文/code/go/mev_auction/bsc-rpc-client/log/rpc.log"
     dst_file = f"./{lab}/bsc-rpc-client.log"

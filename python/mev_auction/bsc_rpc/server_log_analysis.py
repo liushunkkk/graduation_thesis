@@ -4,9 +4,11 @@ from collections import defaultdict, Counter
 import numpy as np
 import matplotlib.pyplot as plt
 
+lab = "high_lab_log_files"
+
 if __name__ == '__main__':
 
-    log_file = "../log_files/bsc-rpc.log"
+    log_file = f"../{lab}/bsc-rpc.log"
 
     # 数据存储
     pool_records = []

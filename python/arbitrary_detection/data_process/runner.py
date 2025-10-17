@@ -63,6 +63,7 @@ class DataProcessRunner:
         self.name = "DataProcessRunner"
         self.TableEthereum = "ethereum"
         self.TableComparison = "comparison"
+        self.TableTestComparison = "test_comparison"
 
     def get_rows(self, table, limit):
         """
@@ -98,8 +99,10 @@ class DataProcessRunner:
         """
         if table == self.TableEthereum:
             file_name = "../files/positive_tx_hashes.csv"
-        else:
+        elif table == self.TableComparison:
             file_name = "../files/negative_tx_hashes.csv"
+        else:
+            file_name = "../files/test_negative_tx_hashes.csv"
         if os.path.exists(file_name):
             os.remove(file_name)
         df[['tx_hash']].to_csv(file_name, index=False)
@@ -112,8 +115,10 @@ class DataProcessRunner:
         """
         if table == self.TableEthereum:
             file_name = '../files/positive_data.csv'
-        else:
+        elif table == self.TableComparison:
             file_name = '../files/negative_data.csv'
+        else:
+            file_name = '../files/test_negative_data.csv'
         if os.path.exists(file_name):
             os.remove(file_name)
         df.to_csv(file_name, index=False)
@@ -155,6 +160,25 @@ def operate_negative(limit=10000):
     r.output_all(df, r.TableComparison)
 
 
+def operate_negative_test(limit=10000):
+    r = DataProcessRunner()
+    columns, rows = r.get_rows(r.TableTestComparison, limit)
+    print(columns)
+
+    df = r.transfer_to_dataframe(columns, rows)
+    print(df)
+
+    # low, upper, df = r.filter_rows_within_data_length(df)
+    # print(low, upper)
+
+    print(df)
+
+    r.output_tx_hash(df, r.TableTestComparison)
+
+    r.output_all(df, r.TableTestComparison)
+
+
 if __name__ == '__main__':
     # operate_positive(100000)
-    operate_negative(200000)
+    # operate_negative(200000)
+    operate_negative_test(400000)

@@ -5,7 +5,7 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 
 if __name__ == '__main__':
-    log_file = "../log_files/share-node.log"
+    log_file = "../base_lab_log_files/share-node.log"
 
     # 数据存储
     send_counts_per_sec_share_node = defaultdict(lambda: defaultdict(int))  # builder -> {秒时间 -> count}
@@ -33,7 +33,7 @@ if __name__ == '__main__':
                 bucket = (t_sec // 3) * 3  # 3秒一个桶
                 send_counts_per_sec_share_node[builder][bucket] += 1
 
-    log_file = "../log_files/bsc-rpc.log"
+    log_file = "../base_lab_log_files/bsc-rpc.log"
 
     # 数据存储
     send_counts_per_sec_bsc_rpc = defaultdict(lambda: defaultdict(int))  # builder -> {秒时间 -> count}
