@@ -12,5 +12,6 @@ func main() {
 	//data_collection.RunComparisonDatasetLess()
 	//data_collection.RunDataFillFromAddressEthereum()
 	//data_collection.RunDataFillFromAddressComparison()
-	data_collection.RunComparisonDatasetCollectionV2()
+	//data_collection.RunComparisonDatasetCollectionV2()
+	data_collection.RunComparisonDatasetCollectionV3()
 }

@@ -37,7 +37,8 @@ class TxDataset(Dataset):
         # [gas_price,gas_tip_cap,gas_fee_cap,gas,value,gas_used,effective_gas_price,transaction_index,data_len,logs_len,transfer_len]
         # 原始 num_feature 是字符串形式，需要先 eval，再筛选
         # self.num_features = df['num_feature'].apply(lambda x: [eval(x)[i] for i in selected_idx]).tolist()
-        self.num_features = df[["gas", "gas_used", 'data_len', 'logs_len']].values.tolist()
+        self.num_features = df[
+            ["gas", "gas_used", "gas_price", "effective_gas_price", "data_len", "logs_len"]].values.tolist()
         self.labels = df['label'].tolist()
 
         # 直接读取 data_token / logs_token（无 0x 前缀）
@@ -190,21 +191,10 @@ def evaluate(loader, model, thresholds=None, device=torch.device('cpu')):
 
 
 # ====== 训练函数 ======
-def train_model(pos_csv, neg_csv, use_features=None,
-                batch_size=128, epochs=10, lr=1e-3, test_ratio=0.2, model_path=""):
+def train_model(use_features=None,
+                batch_size=128, epochs=10, lr=1e-3, model_path=""):
     if use_features is None:
         use_features = ["num", "data", "logs"]
-
-    if not os.path.exists(f"../{TARGET}/datasets/train.csv"):
-        print("重新构建")
-        pos_df = pd.read_csv(pos_csv)
-        pos_df['label'] = 1
-        neg_df = pd.read_csv(neg_csv)
-        neg_df['label'] = 0
-        df = pd.concat([pos_df, neg_df]).sort_values("block_number").reset_index(drop=True)
-        test_size = int(len(df) * test_ratio)
-        df.iloc[:-test_size].to_csv(f"../{TARGET}/datasets/train.csv", index=False)
-        df.iloc[-test_size:].to_csv(f"../{TARGET}/datasets/test.csv", index=False)
 
     train_set = TxDataset(f"../{TARGET}/datasets/train.csv")
     test_set = TxDataset(f"../{TARGET}/datasets/test.csv")
@@ -225,7 +215,7 @@ def train_model(pos_csv, neg_csv, use_features=None,
     train_acc_list, val_acc_list = [], []
     train_f1_list, val_f1_list = [], []
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{DEVICE}" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     for epoch in range(epochs):
@@ -271,7 +261,7 @@ def only_test(model_epoch, test_path, use_features):
     print("testing set: ", len(test_set))
     test_loader = DataLoader(test_set, batch_size=128)
     model = torch.load(f"./models/model_epoch_{model_epoch}.pth", weights_only=False)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{DEVICE}" if torch.cuda.is_available() else "cpu")
     test_results, y_true_test, y_pred_prob_test = evaluate(test_loader, model, device=device)
     th_t, tp_t, fp_t, tn_t, fn_t, acc_t, prec_t, recall_t, f1_t = test_results[4]
     print(f"  Test : TP={tp_t}, TN={tn_t}, FP={fp_t}, FN={fn_t}, "
@@ -279,11 +269,10 @@ def only_test(model_epoch, test_path, use_features):
 
 
 if __name__ == "__main__":
-    # global TARGET
-    # TARGET = "eth_dataset"  # half_data or all_data
-    # pos_csv = f"../{TARGET}/datasets/eth_positive_data.csv"
-    # neg_csv = f"../{TARGET}/datasets/eth_negative_data.csv"
-    # model = train_model(pos_csv, neg_csv, use_features=["num", "data", "logs"], epochs=20)
+    global TARGET
+    TARGET = "eth_dataset"
+    DEVICE = 5
+    model = train_model(use_features=["num", "data", "logs"], epochs=15)
 
-    # only test
-    only_test(5, "../all_data/datasets/test.csv", ["num", "data", "logs"])
+    # only test 0-19 7最好
+    # only_test(7, "../all_data/datasets/test.csv", ["num", "data", "logs"])

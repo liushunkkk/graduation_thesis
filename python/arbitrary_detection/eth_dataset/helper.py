@@ -15,6 +15,9 @@ if __name__ == '__main__':
     print(f"最大区块号：{max_block}")
     print(f"个数：{len(block_numbers)}")
 
+    print(len(df[df["label"] == 1]))
+    print(len(df[df["label"] == 0]))
+
     df = pd.read_csv("./datasets/train.csv")
 
     # 提取 block_number 列
@@ -29,11 +32,12 @@ if __name__ == '__main__':
     print(f"最大区块号：{max_block}")
     print(f"个数：{len(block_numbers)}")
 
-    # test
-    # 最小区块号：47560341
-    # 最大区块号：47570103
-    # 个数：59719
+    # 最小区块号：10866588
+    # 最大区块号：11080466
+    # 个数：411905
+    # 19963
+    # 391942
     # train
-    # 最小区块号：47462117
-    # 最大区块号：47560341
-    # 个数：238877
+    # 最小区块号：10000126
+    # 最大区块号：10866587
+    # 个数：239566

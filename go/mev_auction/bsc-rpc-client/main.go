@@ -29,14 +29,21 @@ func main() {
 		panic(err)
 	}
 
-	openBlock := false // 是否开启模拟搜索者阻塞
+	openBlock := true // 是否开启模拟搜索者阻塞
 	if openBlock {
 		go func() {
 			time.Sleep(1 * time.Minute)
 			core.GlobalIsBlock = true
 		}()
 	}
-	highStream := true // 是否开启模拟某用户高并发
+	highStream := false // 是否开启模拟某用户高并发
+
+	// 是否开启多层嵌套实验
+	openMultiLayer := false
+	if openMultiLayer {
+		core.MultiLayer = true
+	}
+
 	core.InitSearcher(cancelCtx, 2, openBlock)
 	core.InitUser(cancelCtx, 3, highStream)
 

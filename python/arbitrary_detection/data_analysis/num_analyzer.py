@@ -8,10 +8,20 @@ import seaborn as sns
 
 
 class NumFeatureAnalyzer:
-    def __init__(self, pos_file, neg_file, num_cols):
-        self.pos_df = pd.read_csv(pos_file)
-        self.neg_df = pd.read_csv(neg_file)
+    def __init__(self, data_file, num_cols, label_col="label"):
+        """
+        参数：
+        - data_file: 包含正负样本的 CSV 文件路径
+        - num_cols: 要分析的数值特征列列表
+        - label_col: 标签列名，默认 'label'，1=正样本, 0=负样本
+        """
+        self.df = pd.read_csv(data_file)
         self.num_cols = num_cols
+        self.label_col = label_col
+
+        # 分开正负样本
+        self.pos_df = self.df[self.df[label_col] == 1]
+        self.neg_df = self.df[self.df[label_col] == 0]
 
         # 确保数值列为 float
         for col in num_cols:
@@ -19,9 +29,11 @@ class NumFeatureAnalyzer:
             self.neg_df[col] = pd.to_numeric(self.neg_df[col], errors='coerce')
 
     def cohen_d(self, pos, neg):
+        """计算 Cohen's d：衡量两个分布均值差的效应量"""
         return (pos.mean() - neg.mean()) / np.sqrt((pos.std() ** 2 + neg.std() ** 2) / 2)
 
     def overlap_area(self, pos, neg, bins=1000):
+        """计算两个正态分布近似的重叠面积"""
         mu1, sigma1 = pos.mean(), pos.std()
         mu2, sigma2 = neg.mean(), neg.std()
         sigma1 = sigma1 if sigma1 > 0 else 1e-6
@@ -35,10 +47,13 @@ class NumFeatureAnalyzer:
         return overlap
 
     def analyze(self):
+        """输出每个数值特征的统计差异指标"""
         results = []
         for col in self.num_cols:
             pos_vals = self.pos_df[col].dropna()
             neg_vals = self.neg_df[col].dropna()
+            if len(pos_vals) == 0 or len(neg_vals) == 0:
+                continue
             d = self.cohen_d(pos_vals, neg_vals)
             overlap = self.overlap_area(pos_vals, neg_vals)
             results.append({
@@ -51,7 +66,7 @@ class NumFeatureAnalyzer:
                 'overlap_area': overlap
             })
         results.sort(key=lambda x: abs(x['cohen_d']), reverse=True)
-        return results
+        return pd.DataFrame(results)
 
     def plot_distributions(self, features=None, bins=50, right_clip_quantile=0.99):
         """
@@ -67,7 +82,11 @@ class NumFeatureAnalyzer:
             pos_vals = self.pos_df[col].dropna()
             neg_vals = self.neg_df[col].dropna()
 
-            # 只截断右边长尾
+            if len(pos_vals) == 0 or len(neg_vals) == 0:
+                print(f"跳过特征 {col}（缺少有效数据）")
+                continue
+
+            # 截断右尾长尾值
             upper = max(pos_vals.quantile(right_clip_quantile),
                         neg_vals.quantile(right_clip_quantile))
             pos_vals = pos_vals[pos_vals <= upper]
@@ -90,28 +109,35 @@ class NumFeatureAnalyzer:
 class StructFeatureAnalyzer:
     TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-    def __init__(self, pos_file, neg_file, clip_percentile=0.99):
-        self.pos_df = pd.read_csv(pos_file)
-        self.neg_df = pd.read_csv(neg_file)
+    def __init__(self, merged_file, clip_percentile=0.99):
+        """初始化：读入包含 label 列的合并数据"""
+        self.merged_df = pd.read_csv(merged_file)
         self.clip_percentile = clip_percentile
-        self.merged_df = pd.concat([self.pos_df, self.neg_df], ignore_index=True)
+
+        # 按 label 拆分
+        self.pos_df = self.merged_df[self.merged_df["label"] == 1].reset_index(drop=True)
+        self.neg_df = self.merged_df[self.merged_df["label"] == 0].reset_index(drop=True)
+
+        print(
+            f"✅ 数据加载完成：正样本 {len(self.pos_df)} 条，负样本 {len(self.neg_df)} 条，总计 {len(self.merged_df)} 条。")
 
     def clip_tail(self, series):
+        """裁剪长尾分布"""
+        if series.dropna().empty:
+            return series
         upper = np.nanquantile(series, self.clip_percentile)
         return series.clip(upper=upper)
 
     def _print_and_plot(self, pos_vals, neg_vals, merged_vals, title, xlabel):
-        """通用输出统计+画图逻辑"""
-
-        # ---- 打印原始统计 ----
-        print(f"=== {title} (原始) ===")
+        """打印统计并绘制分布"""
+        print(f"=== {title} ===")
         for name, vals in [("正样本", pos_vals), ("负样本", neg_vals), ("合并样本", merged_vals)]:
             print(f"{name}：")
             print(vals.describe())
             print(f"90分位: {vals.quantile(0.9):.2f}, 95分位: {vals.quantile(0.95):.2f}\n")
         print("-------------------------------------------")
 
-        # ---- 绘图（裁剪后可视化） ----
+        # 绘图
         pos_clip = self.clip_tail(pos_vals)
         neg_clip = self.clip_tail(neg_vals)
         merged_clip = self.clip_tail(merged_vals)
@@ -121,12 +147,13 @@ class StructFeatureAnalyzer:
         sns.histplot(neg_clip, bins=50, color="red", label="Negative", stat="density", alpha=0.4)
         sns.histplot(merged_clip, bins=50, color="green", label="Merged", stat="density", alpha=0.3)
 
-        # ---- 添加P90 / P95线 ----
         for vals, color, label in [
             (pos_vals, "blue", "Pos"),
             (neg_vals, "red", "Neg"),
             (merged_vals, "green", "Merged")
         ]:
+            if vals.dropna().empty:
+                continue
             p90 = vals.quantile(0.9)
             p95 = vals.quantile(0.95)
             plt.axvline(p90, color=color, linestyle="--", alpha=0.7)
@@ -144,9 +171,9 @@ class StructFeatureAnalyzer:
 
     # ====================== data 列长度分析 ======================
     def analyze_data_length(self):
+        self.merged_df["data_len"] = self.merged_df["data"].fillna("").apply(len)
         self.pos_df["data_len"] = self.pos_df["data"].fillna("").apply(len)
         self.neg_df["data_len"] = self.neg_df["data"].fillna("").apply(len)
-        self.merged_df["data_len"] = self.merged_df["data"].fillna("").apply(len)
         self._print_and_plot(
             self.pos_df["data_len"],
             self.neg_df["data_len"],
@@ -164,9 +191,9 @@ class StructFeatureAnalyzer:
             except Exception:
                 return 0
 
+        self.merged_df["logs_count"] = self.merged_df["logs"].apply(safe_count)
         self.pos_df["logs_count"] = self.pos_df["logs"].apply(safe_count)
         self.neg_df["logs_count"] = self.neg_df["logs"].apply(safe_count)
-        self.merged_df["logs_count"] = self.merged_df["logs"].apply(safe_count)
         self._print_and_plot(
             self.pos_df["logs_count"],
             self.neg_df["logs_count"],
@@ -189,9 +216,9 @@ class StructFeatureAnalyzer:
             except Exception:
                 return 0
 
+        self.merged_df["transfer_count"] = self.merged_df["logs"].apply(count_transfer)
         self.pos_df["transfer_count"] = self.pos_df["logs"].apply(count_transfer)
         self.neg_df["transfer_count"] = self.neg_df["logs"].apply(count_transfer)
-        self.merged_df["transfer_count"] = self.merged_df["logs"].apply(count_transfer)
         self._print_and_plot(
             self.pos_df["transfer_count"],
             self.neg_df["transfer_count"],
@@ -203,7 +230,7 @@ class StructFeatureAnalyzer:
 
 if __name__ == "__main__":
     global TARGET
-    TARGET = "all_data" # all_data or half_data
+    TARGET = "all_data"  # all_data or half_data
     num_cols = [
         "gas_price",
         "gas_tip_cap",
@@ -214,16 +241,17 @@ if __name__ == "__main__":
         "effective_gas_price",
         "transaction_index"
     ]
-    analyzer = NumFeatureAnalyzer(f"../{TARGET}/datasets/positive_data.csv", f"../{TARGET}/datasets/negative_data.csv", num_cols)
-    results = analyzer.analyze()
-    for r in results:
-        print(f"{r['feature']}: cohen_d={r['cohen_d']:.3f}, overlap_area={r['overlap_area']:.3f}, "
-              f"pos_mean={r['pos_mean']:.3f}, neg_mean={r['neg_mean']:.3f}")
+    analyzer = NumFeatureAnalyzer(
+        data_file=f"../{TARGET}/datasets/new_test_data.csv",
+        num_cols=num_cols
+    )
+    # 查看差异分析结果
+    df_results = analyzer.analyze()
+    print(df_results)
+    # 可视化部分特征分布
+    analyzer.plot_distributions(features=num_cols)
 
-    analyzer.plot_distributions(features=num_cols, right_clip_quantile=0.95)
-
-    analyzer = StructFeatureAnalyzer(f"../{TARGET}/datasets/positive_data.csv", f"../{TARGET}/datasets/negative_data.csv",
-                                     clip_percentile=0.95)
-    analyzer.analyze_data_length()
-    analyzer.analyze_logs_count()
-    analyzer.analyze_transfer_events()
+    # analyzer = StructFeatureAnalyzer(f"../{TARGET}/datasets/train_data.csv", clip_percentile=0.95)
+    # analyzer.analyze_data_length()
+    # analyzer.analyze_logs_count()
+    # analyzer.analyze_transfer_events()

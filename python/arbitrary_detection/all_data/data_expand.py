@@ -43,7 +43,7 @@ def append_and_process_features(file_path):
     df = pd.read_csv(file_path)
 
     # 新增三列
-    df['data_len'] = df['data'].apply(lambda x: len(serialize_single_data(x)))
+    df['data_len'] = df['data'].apply(lambda x: len(x))
     df['logs_len'] = df['logs'].apply(lambda x: len(serialize_logs(x)))
     df['transfer_len'] = df['logs'].apply(lambda x: count_transfer(serialize_logs(x)))
 
@@ -73,8 +73,8 @@ def append_and_process_features(file_path):
 
 if __name__ == "__main__":
     files = [
-        "./datasets/positive_data.csv",
-        "./datasets/negative_data.csv"
+        "./datasets/train.csv",
+        "./datasets/test.csv",
     ]
 
     for f in files:

@@ -117,12 +117,12 @@ class ArbiNetTransactionBuilder:
                     if addr in ca_addresses:
                         is_ca_address = 1
                     else:
-                        is_ca_address = 0
-                        # addr_checksum = Web3.to_checksum_address(addr)
-                        # code = self.w3.eth.get_code(addr_checksum)
-                        # is_ca_address = 1 if code == b'' or code == b'0x' else 0
-                        # if is_ca_address:
-                        #     ca_addresses.add(addr)
+                        # is_ca_address = 0
+                        addr_checksum = Web3.to_checksum_address(addr)
+                        code = self.w3.eth.get_code(addr_checksum)
+                        is_ca_address = 1 if code == b'' or code == b'0x' else 0
+                        if is_ca_address:
+                            ca_addresses.add(addr)
                     # 节点特征 14 维（保留原注释）
                     x[idx, 0] = neg_count  # count of tokens whose profit is smaller than 0
                     x[idx, 1] = pos_count  # count of tokens whose profit is greater than 0

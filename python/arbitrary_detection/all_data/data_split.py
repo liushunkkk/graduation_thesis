@@ -2,19 +2,103 @@ import os
 
 import pandas as pd
 
-if __name__ == '__main__':
+
+def split_origin_data():
     test_ratio = 0.2
-    pos_csv = "./datasets/positive_data.csv"
-    neg_csv = "./datasets/negative_data.csv"
-    if not os.path.exists(f"./datasets/train.csv"):
+    pos_csv = "../files/positive_data.csv"
+    neg_csv = "../files/negative_data.csv"
+
+    train_path = "./datasets/train_data.csv"
+    test_path = "./datasets/test_data.csv"
+
+    if not os.path.exists(train_path):
         print("重新构建")
+
+        # 读取数据并打上标签
         pos_df = pd.read_csv(pos_csv)
         pos_df['label'] = 1
         neg_df = pd.read_csv(neg_csv)
         neg_df['label'] = 0
+
+        # 合并并按 block_number 排序
         df = pd.concat([pos_df, neg_df]).sort_values("block_number").reset_index(drop=True)
-        test_size = int(len(df) * test_ratio)
-        df.iloc[:-test_size].to_csv(f"./datasets/train.csv", index=False)
-        df.iloc[-test_size:].to_csv(f"./datasets/test.csv", index=False)
+
+        # 计算目标划分位置
+        total_len = len(df)
+        target_test_size = int(total_len * test_ratio)
+        split_index = total_len - target_test_size  # 80% 位置
+
+        # 找到分界处的 block_number
+        boundary_block = df.iloc[split_index]["block_number"]
+        print("boundary_block: ", boundary_block)
+
+        # 所有 block_number < boundary_block 的样本为训练集
+        # 所有 block_number >= boundary_block 的样本为测试集
+        # 注意：如果 boundary_block 出现的样本被部分划分到测试集，
+        # 我们要把它们全部归入训练集（即不拆 block）
+        train_df = df[df["block_number"] <= boundary_block]
+        test_df = df[df["block_number"] > boundary_block]
+
+        # 如果测试集太小（例如边界 block 体量大），可在这里打印查看比例
+        print(f"训练集: {len(train_df)}, 测试集: {len(test_df)}, 实际比例: {len(test_df) / len(df):.2f}")
+
+        # 保存结果
+        os.makedirs("./datasets", exist_ok=True)
+        train_df.to_csv(train_path, index=False)
+        test_df.to_csv(test_path, index=False)
+
     else:
         print("已存在")
+    # 训练集: 238880, 测试集: 59716, 实际比例: 0.20
+
+
+def supple_negative_data():
+    origin_neg_csv = "./datasets/test_data.csv"
+    origin_neg_df = pd.read_csv(origin_neg_csv)
+    supple_neg_csv = "../files/test_negative_data.csv"
+    supple_neg_df = pd.read_csv(supple_neg_csv)
+    supple_neg_df['label'] = 0
+    print("supple_neg_df 长度:", len(supple_neg_df))
+    merged_df = pd.concat([origin_neg_df, supple_neg_df], ignore_index=True)
+    merged_df = merged_df.drop_duplicates(subset='tx_hash', keep='first')
+    merged_df.to_csv('./datasets/new_test_data.csv', index=False)
+    print("已合并到new_test_data.csv")
+    print("new_test_data长度: ", len(merged_df)) # 416577
+
+
+def expandIndex():
+    merged_df = pd.read_csv('./datasets/new_test_data.csv')
+    max_pos_index = (
+        merged_df[merged_df['label'] == 1]
+        .groupby('block_number')['transaction_index']
+        .max()
+        .rename('max_pos_tx_index')
+    )
+
+    merged_df = merged_df.merge(max_pos_index, on='block_number', how='left')
+
+    # 筛选保留的样本：
+    #     - 所有正样本
+    #     - 满足条件的负样本
+    filtered_df = merged_df[
+        (merged_df['label'] == 1) |
+        ((merged_df['label'] == 0) &
+         (merged_df['transaction_index'] < merged_df['max_pos_tx_index']))
+        ].copy()
+
+    filtered_df = filtered_df.drop(columns=['max_pos_tx_index'])
+
+    filtered_df.to_csv('./datasets/expanded_test_data.csv', index=False)
+
+    print(f"筛选后样本总数: {len(filtered_df)}")
+    print(f"其中正样本数: {(filtered_df['label'] == 1).sum()}")
+    print(f"其中负样本数: {(filtered_df['label'] == 0).sum()}")
+    # 筛选后样本总数: 70720
+    # 其中正样本数: 20021
+    # 其中负样本数: 50699
+
+
+if __name__ == '__main__':
+    split_origin_data()
+    supple_negative_data()
+    expandIndex()

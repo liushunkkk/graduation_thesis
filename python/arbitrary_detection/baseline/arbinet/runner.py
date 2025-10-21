@@ -9,7 +9,7 @@ from baseline.arbinet.trainer import ArbiNetTrainer
 
 if __name__ == '__main__':
     TARGET = "all_data"
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
     print('Using device:', device)
 
     # ================= 1. 构建训练图 =================
@@ -26,14 +26,14 @@ if __name__ == '__main__':
 
     # ================= 2. 构建测试图 =================
     print("load test...")
-    if os.path.exists("test_graphs1.pt"):
-        test_graphs = torch.load("test_graphs1.pt", weights_only=False)  # 加载回来
+    if os.path.exists("test_graphs2.pt"):
+        test_graphs = torch.load("test_graphs2.pt", weights_only=False)  # 加载回来
         print("load from test_graphs.pt")
     else:
         test_df = pd.read_csv(f"../../{TARGET}/datasets/test.csv")
         builder_test = ArbiNetTransactionBuilder(test_df)
         test_graphs = builder_test.build_graphs()
-        torch.save(test_graphs, "test_graphs1.pt")  # 保存整个列表
+        torch.save(test_graphs, "test_graphs2.pt")  # 保存整个列表
         print("load from test.csv and build")
     print("total train graph: ", len(train_graphs))
     print("total test graph: ", len(test_graphs))

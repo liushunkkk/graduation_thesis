@@ -8,7 +8,7 @@ import hashlib
 
 
 class FeaturePreprocessor:
-    def __init__(self, input_file: str, output_file: str, vocab_size=20000, data_max_len=48, logs_max_len=64):
+    def __init__(self, input_file: str, output_file: str, vocab_size=40000, data_max_len=48, logs_max_len=64):
         self.input_file = input_file
         self.output_file = output_file
         self.df = None
@@ -44,7 +44,8 @@ class FeaturePreprocessor:
             "effective_gas_price",
             "transaction_index",
             "data",
-            "logs"
+            "logs",
+            "label"
         ]
 
     def load_data(self):
@@ -202,8 +203,8 @@ class FeaturePreprocessor:
 
 
 if __name__ == "__main__":
-    input_file = "../files/positive_data.csv"
-    output_file = "./datasets/positive_data.csv"
+    input_file = "./datasets/train_data.csv"
+    output_file = "./datasets/train.csv"
     processor = FeaturePreprocessor(input_file, output_file)
     processor.run()
 
@@ -211,9 +212,8 @@ if __name__ == "__main__":
     print(output.columns)
     print(output[:1])
 
-    # 负样本和正样本数量2:1
-    input_file = "../files/negative_data.csv"
-    output_file = "./datasets/negative_data.csv"
+    input_file = "./datasets/new_test_data.csv"
+    output_file = "./datasets/test.csv"
     processor = FeaturePreprocessor(input_file, output_file)
     processor.run(keep_half=False)
 

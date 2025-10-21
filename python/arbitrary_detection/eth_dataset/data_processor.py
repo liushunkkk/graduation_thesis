@@ -40,7 +40,8 @@ class FeaturePreprocessor:
             "effective_gas_price",
             "transaction_index",
             "data",
-            "logs"
+            "logs",
+            "label"
         ]
 
     def load_data(self):
@@ -186,18 +187,26 @@ class FeaturePreprocessor:
 
 
 if __name__ == "__main__":
-    input_file = "../files/eth_positive_data.csv"
-    output_file = "./datasets/eth_positive_data.csv"
+    input_file = "./datasets/train_data.csv"
+    output_file = "./datasets/train.csv"
     processor = FeaturePreprocessor(input_file, output_file)
     processor.run()
 
-    output = pd.read_csv(output_file)
+    output = pd.read_csv(output_file) # 239566
     print(output.columns)
     print(output[:1])
 
-    # 负样本和正样本数量2:1
-    input_file = "../files/eth_negative_data.csv"
-    output_file = "./datasets/eth_negative_data.csv"
+    input_file = "./datasets/new_test_data.csv"
+    output_file = "./datasets/test.csv"
+    processor = FeaturePreprocessor(input_file, output_file)
+    processor.run(keep_half=False)
+
+    output = pd.read_csv(output_file) # 411905
+    print(output.columns)
+    print(output[:1])
+
+    input_file = "../files/enriched_latest_eth_transactions.csv"
+    output_file = "./datasets/latest_test.csv"
     processor = FeaturePreprocessor(input_file, output_file)
     processor.run(keep_half=False)
 

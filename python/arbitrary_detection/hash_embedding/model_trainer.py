@@ -36,7 +36,7 @@ class TxDataset(Dataset):
 
 # ====== Encoder ======
 class TxEncoder(nn.Module):
-    def __init__(self, num_dim=8, data_vocab_size=20000, logs_vocab_size=20000,
+    def __init__(self, num_dim=8, data_vocab_size=40000, logs_vocab_size=40000,
                  emb_dim=128, use_features=None):
         super().__init__()
         if use_features is None:
@@ -165,32 +165,10 @@ def plot_metrics(train_metrics, val_metrics, metric_name):
 
 
 # ====== 训练函数 ======
-def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=20000, logs_vocab_size=20000,
+def train_model(use_features=None, data_vocab_size=40000, logs_vocab_size=40000,
                 batch_size=512, epochs=5, lr=1e-3, test_ratio=0.2):
     if use_features is None:
         use_features = ["num", "data", "logs"]
-    if not os.path.exists(f"../{TARGET}/datasets/train.csv"):
-        print("Loading data...")
-        pos_df = pd.read_csv(pos_csv)
-        pos_df['label'] = 1
-        neg_df = pd.read_csv(neg_csv)
-        neg_df['label'] = 0
-        print("Loading data 完成...")
-
-        print("按照block_number排序后，拆分数据集...")
-        # 合并并排序
-        df = pd.concat([pos_df, neg_df]).sort_values(by="block_number").reset_index(drop=True)
-
-        # 划分
-        test_size = int(len(df) * test_ratio)
-        train_df = df.iloc[:-test_size]
-        test_df = df.iloc[-test_size:]
-
-        # 保存
-        train_df.to_csv(f"../{TARGET}/datasets/train.csv", index=False)
-        test_df.to_csv(f"../{TARGET}/datasets/test.csv", index=False)
-        print(
-            f"保存完成: ../{TARGET}/datasets/train.csv {len(train_df)} 条, ../{TARGET}/datasets/test.csv {len(test_df)} 条")
 
     print("load train and test dataset...")
     train_set = TxDataset(f"../{TARGET}/datasets/train.csv")
@@ -211,7 +189,7 @@ def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=20000, logs
     train_f1_list, val_f1_list = [], []
 
     # 设置在gpu上工作
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:9" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
     model.to(device)
 
@@ -283,6 +261,4 @@ def train_model(pos_csv, neg_csv, use_features=None, data_vocab_size=20000, logs
 if __name__ == "__main__":
     global TARGET
     TARGET = "all_data"  # half_data or all_data
-    pos_csv = f"../{TARGET}/datasets/positive_data.csv"
-    neg_csv = f"../{TARGET}/datasets/negative_data.csv"
-    model = train_model(pos_csv, neg_csv, batch_size=128, use_features=["data", "logs"], epochs=30)
+    model = train_model(batch_size=128, use_features=["data", "logs"], epochs=20)
