@@ -48,11 +48,16 @@ if __name__ == '__main__':
 
     # ================= 5. 训练 =================
     print("training...")
-    trainer.train(epochs=20, log_interval=1)
+    trainer.train(epochs=1, log_interval=1)
 
     # ================= 6. 测试 =================
     print("testing...")
-    trainer.test()
+    metrics, y_pred = trainer.test()
+
+    res = pd.read_csv("../result.csv")
+    res["arbinet_result"] = y_pred
+
+    res.to_csv("../result.csv", index=False)
 
     # ================= 7. 单笔交易预测示例 =================
     # model.eval()

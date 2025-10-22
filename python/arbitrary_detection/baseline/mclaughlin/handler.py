@@ -97,4 +97,4 @@ class MclaughlinHandler:
             "total": total,
             "correct": correct,
             "wrong": wrong
-        }
+        }, y_pred

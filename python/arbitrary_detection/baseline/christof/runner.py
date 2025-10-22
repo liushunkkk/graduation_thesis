@@ -1,5 +1,6 @@
 from collections import Counter
 
+import pandas as pd
 from web3 import Web3
 
 from baseline.christof.detector import SwapArbitrageDetector
@@ -21,8 +22,13 @@ if __name__ == '__main__':
     print(count)
 
     # 计算指标
-    metrics = handler.compute_metrics(df_results)
+    metrics, y_pred = handler.compute_metrics(df_results)
     print(metrics)
+
+    res = pd.read_csv("../result.csv")
+    res["christof_result"] = y_pred
+
+    res.to_csv("../result.csv", index=False)
 
     # 查看前几行结果
     # print(df_results.head(10))

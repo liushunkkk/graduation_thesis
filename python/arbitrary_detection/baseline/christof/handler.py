@@ -102,4 +102,4 @@ class ChristofHandler:
             "total": total,
             "correct": correct,
             "wrong": wrong
-        }
+        }, y_pred

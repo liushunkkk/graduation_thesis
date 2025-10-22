@@ -115,7 +115,7 @@ class ArbiNetTrainer:
               f"Precision: {metrics['precision']:.4f} | Recall: {metrics['recall']:.4f} | "
               f"F1: {metrics['f1']:.4f} | TP: {metrics['tp']} | TN: {metrics['tn']} | "
               f"FP: {metrics['fp']} | FN: {metrics['fn']}")
-        return metrics
+        return metrics, all_pred
 
     @staticmethod
     def evaluate_metrics(pred, true):
