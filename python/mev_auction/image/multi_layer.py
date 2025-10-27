@@ -76,8 +76,8 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(6, 4))
 
-        plt.bar(x - width / 2, [c1.get(k, 0) for k in all_keys], width=width, label="mutil-layer lab")
-        plt.bar(x + width / 2, [c.get(k, 0) for k in all_keys], width=width, label="comparison lab")
+        plt.bar(x - width / 2, [c1.get(k, 0) for k in all_keys], width=width, label="comparison lab")
+        plt.bar(x + width / 2, [c.get(k, 0) for k in all_keys], width=width, label="mutil-layer lab")
         plt.xlabel("Txs")
         plt.ylabel("Send count")
         plt.title(f"Builder txs distribution")

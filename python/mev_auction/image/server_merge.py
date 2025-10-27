@@ -77,7 +77,7 @@ if __name__ == '__main__':
             t0_share = times_share[0]
             times_offset_share = [t - t0_share for t in times_share]
             share_y = [share_counts[t] for t in times_share]
-            plt.plot(times_offset_share, share_y, label="mev-share-node", marker="o")
+            plt.plot(times_offset_share, share_y, label="MEV Share Node", marker="o")
 
         # === bsc-rpc ===
         if bsc_counts:
@@ -85,11 +85,11 @@ if __name__ == '__main__':
             t0_bsc = times_bsc[0]
             times_offset_bsc = [t - t0_bsc for t in times_bsc]
             bsc_y = [bsc_counts[t] for t in times_bsc]
-            plt.plot(times_offset_bsc, bsc_y, label="our-node", marker="o")
+            plt.plot(times_offset_bsc, bsc_y, label="MP-RPC Node", marker="o")
 
         plt.xlabel("Relative Time (s, 3-second bucket offset)")
         plt.ylabel("Avg txs per 3 seconds")
-        plt.title(f"Single builder send count")
+        plt.title(f"builder sent count")
         plt.legend(
             loc="upper left",
             bbox_to_anchor=(1.02, 1),  # 调整位置：x>1表示右移到图外

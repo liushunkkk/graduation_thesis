@@ -31,7 +31,7 @@ func main() {
 		panic(err)
 	}
 
-	highStream := true // 是否开启模拟某用户高并发
+	highStream := false // 是否开启模拟某用户高并发
 	core.InitUser(cancelCtx, 3, highStream)
 
 	if highStream {

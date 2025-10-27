@@ -4,7 +4,7 @@ from collections import defaultdict, Counter
 import numpy as np
 import matplotlib.pyplot as plt
 
-lab = "high_lab_log_files"
+lab = "base_lab_log_files"
 
 if __name__ == '__main__':
 

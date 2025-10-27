@@ -62,7 +62,7 @@ func (u *User) sendTransaction() {
 		Version: "v0.1",
 		Inclusion: model.MevBundleInclusion{
 			BlockNumber: hexutil.Uint64(GlobalBlockManager.GetCurrentBlock() + 1),
-			MaxBlock:    hexutil.Uint64(GlobalBlockManager.GetCurrentBlock() + 2),
+			MaxBlock:    hexutil.Uint64(GlobalBlockManager.GetCurrentBlock() + 1),
 		},
 		Privacy: &model.MevBundlePrivacy{
 			Hints: model.GetAllHints(),

@@ -29,7 +29,7 @@ func main() {
 		panic(err)
 	}
 
-	openBlock := true // 是否开启模拟搜索者阻塞
+	openBlock := false // 是否开启模拟搜索者阻塞
 	if openBlock {
 		go func() {
 			time.Sleep(1 * time.Minute)

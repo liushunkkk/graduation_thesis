@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from matplotlib import pyplot as plt
 
-lab = "high_lab_log_files"
+lab = "base_lab_log_files"
 
 def parse_log_line(line):
     try:

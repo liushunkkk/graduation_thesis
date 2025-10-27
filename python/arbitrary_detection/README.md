@@ -1,6 +1,7 @@
 # 原子套利交易识别方法
 
-方法依赖见：`requirements.txt`文件
+方法依赖见：`requirements.txt`文件。
+
 此外，从数据库导出文件，还需要用到`pymysql`库，直接通过pip安装即可。
 
 ## 数据处理
@@ -48,7 +49,7 @@ files：数据基础文件保存包
 ### 训练运行：
 
 直接运行两个包下的`model_trainer.py`文件即可，可以给模型设置下列参数：
-- use_features：使用的特征，可以自由组合num，data和logs
+- use_features：使用的特征，可以自由组合num，data和logs，如`["data", "logs"]`
 - char_mode：token内信息的学习聚合方式，支持lstm，cnn和mean，lstm是本文最佳
 - seq_mode：token间信息的学习聚合方法，支持lstm，cnn，mean和attn_pos，attn_pos带位置参数的注意力机制是本文最佳
 - epoch：训练轮数，一般15或20轮即可
@@ -64,7 +65,7 @@ ETH链的数据收集和处理以及模型训练均在`eth_dataset`包下：
 - `handler`文件用于从开源数据集的json文件中加载数据到csv文件中
 - 收集方式和BSC一致，见`collector`相关文件
 - 数据划分和处理也保持一致，和`all_data`包下的文件基本相同，见`data`开头相关文件，
-- 模型定义`model_trainer`与`char_level`包下保持一致
+- 模型定义`model_trainer.py`与`char_level`包下保持一致
 
 ### 其他：
 
