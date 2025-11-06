@@ -16,7 +16,7 @@ Park S, Jeong W, Lee Y, et al. Unraveling the MEV enigma: ABI-free detection mod
 
 McLaughlin首先通过分析每笔交易中的 ERC-20 Transfer 事件，推断代币交换操作，然后构建有向多重图，并利用 Johnson 算法在图中搜索闭环路径判断是否形成代币买入与卖出的循环，以此作为判定标准；
 
-Christof和McLaughlin不同的是，他分析的是去中心化交易所的swap事件，并基于此构建代币流动的图形结构，以图中存在流动环来决策是否是套利交易。根据论文并结合BSC的[实际市场情况](https://defillama.com/chain/bsc)，识别swap事件在表xx中给出：
+Christof/Ferreira和McLaughlin不同的是，他分析的是去中心化交易所的swap事件，并基于此构建代币流动的图形结构，以图中存在流动环来决策是否是套利交易。根据论文并结合BSC的[实际市场情况](https://defillama.com/chain/bsc)，识别swap事件在表xx中给出：
 
 | 去中心化交易所事件       | 事件签名                                                     | 事件哈希标识                                                 |
 | ------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -81,7 +81,7 @@ arbinet包:
 ```
 McLaughlin:
 TP=19378, FP=85100, TN=311456, FN=643 Acc=0.794 Prec=0.185 Recall=0.968, F1=0.311
-Christof:
+Christof/Ferreira:
 TP=17541, FP=9364, TN=387192, FN=2480 Acc=0.972 Prec=0.652 Recall=0.876, F1=0.748
 ArbiNet:
 TP=19399, TN=385448, FP=11108, FN=622 Acc=0.972, Prec=0.636, Recall=0.969, F1=0.768

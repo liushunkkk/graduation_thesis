@@ -3,6 +3,7 @@ package main
 import "arbitrage_detection/data_collection"
 
 func main() {
+	data_collection.FindArbi(47462117, 47580000, 100000)
 	//data_collection.RunDataCollection()
 	//data_collection.RunComparisonDatasetCollection()
 	//data_collection.RunDataCleanUp()
@@ -13,5 +14,5 @@ func main() {
 	//data_collection.RunDataFillFromAddressEthereum()
 	//data_collection.RunDataFillFromAddressComparison()
 	//data_collection.RunComparisonDatasetCollectionV2()
-	data_collection.RunComparisonDatasetCollectionV3()
+	//data_collection.RunComparisonDatasetCollectionV3()
 }

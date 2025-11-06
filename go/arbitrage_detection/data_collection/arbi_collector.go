@@ -12,7 +12,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 var BSC_BUILDER = map[string]string{
@@ -310,19 +309,9 @@ func isOpenSource(tx *types.Transaction) bool {
 }
 
 // FindArbi 查找指定区块范围内的原子套利交易
-func FindArbi(start, end int64) {
+func FindArbi(start, end int64, count int) {
 	ctx := context.Background()
-
-	// 确保客户端已初始化
-	if EthClient == nil {
-		var err error
-		EthClient, err = ethclient.Dial("https://bsc-dataseed.binance.org/")
-		if err != nil {
-			fmt.Printf("无法连接到BSC客户端: %v\n", err)
-			return
-		}
-		defer EthClient.Close()
-	}
+	curr := 1
 
 	handleOne := func(n int64) error {
 		block, err := EthClient.BlockByNumber(ctx, big.NewInt(n))
@@ -382,6 +371,7 @@ func FindArbi(start, end int64) {
 			if err := DB.Table(Table_ArbitraryTransaction).Create(arbitrageTx).Error; err != nil {
 				fmt.Printf("保存套利交易 %s 失败: %v\n", tx.Hash().Hex(), err)
 			} else {
+				curr++
 				fmt.Printf("发现原子套利交易: 区块 %d, TxHash: %s\n", n, tx.Hash().Hex())
 			}
 		}
@@ -391,6 +381,9 @@ func FindArbi(start, end int64) {
 
 	// 遍历处理指定范围内的所有区块
 	for i := start; i < end; i++ {
+		if curr > count {
+			break
+		}
 		err := handleOne(i)
 		if err != nil {
 			fmt.Printf("处理区块 %d 错误: %v\n", i, err)
