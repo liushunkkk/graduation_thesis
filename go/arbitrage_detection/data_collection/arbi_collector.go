@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -115,7 +113,9 @@ func getBuilder(block *types.Block) string {
 	return ""
 }
 
-// extractPrivateTx 从区块中提取隐私流交易
+// extractPrivateTx 从区块中提取隐私流交易：
+// 找到第一个GasPrice连续递增 boundaryIdx 次的起点，
+// 并返回起点之前的所有交易。
 func extractPrivateTx(block *types.Block) []*types.Transaction {
 	if block == nil || len(block.Transactions()) == 0 {
 		return []*types.Transaction{}
@@ -124,52 +124,44 @@ func extractPrivateTx(block *types.Block) []*types.Transaction {
 	txs := block.Transactions()
 	totalTxCount := len(txs)
 
-	// 如果交易太少，直接返回所有交易
-	if totalTxCount <= 5 {
+	// 连续递增的最小长度阈值
+	boundaryIdx := int(float64(totalTxCount) * 0.2)
+	if boundaryIdx < 1 {
+		boundaryIdx = 1
+	}
+
+	// 遍历查找第一个满足连续递增条件的起点
+	foundIndex := -1
+	for i := 0; i <= totalTxCount-boundaryIdx; i++ {
+		increasing := true
+		for j := 0; j < boundaryIdx-1; j++ {
+			g1 := txs[i+j].GasPrice()
+			g2 := txs[i+j+1].GasPrice()
+			if g1 == nil || g2 == nil || g2.Cmp(g1) < 0 {
+				increasing = false
+				break
+			}
+		}
+		if increasing {
+			foundIndex = i
+			break
+		}
+	}
+
+	// 如果没找到，返回所有交易
+	if foundIndex == -1 {
 		return txs
 	}
 
-	// 收集交易及其GasPrice
-	var txsWithGas []TxWithGasPrice
-	for i, tx := range txs {
-		gasPrice := tx.GasPrice()
-		if gasPrice == nil {
-			continue
-		}
-		txsWithGas = append(txsWithGas, TxWithGasPrice{
-			tx:       tx,
-			gasPrice: gasPrice,
-			txIndex:  i,
-		})
-	}
-
-	// 按GasPrice降序排序
-	sort.Slice(txsWithGas, func(i, j int) bool {
-		return txsWithGas[i].gasPrice.Cmp(txsWithGas[j].gasPrice) > 0
-	})
-
-	// 计算隐私流交易边界：总交易数的20% + 延伸2笔
-	privacyFlowCount := int(float64(totalTxCount) * 0.2)
-	if privacyFlowCount < 1 {
-		privacyFlowCount = 1
-	}
-	boundaryIdx := privacyFlowCount + 2
-	if boundaryIdx > totalTxCount {
-		boundaryIdx = totalTxCount
-	}
-
-	// 返回区块头部到边界的交易
-	return txs[:boundaryIdx]
+	// 返回从0到foundIndex（不含递增序列起点）的交易
+	return txs[:foundIndex+2]
 }
 
 // isSwap 判断交易是否包含至少2种代币的Transfer事件
 func isSwap(tx *types.Transaction) bool {
-	if EthClient == nil {
-		return false
-	}
-
 	receipt, err := EthClient.TransactionReceipt(context.Background(), tx.Hash())
 	if err != nil {
+		fmt.Println(err)
 		return false
 	}
 
@@ -192,12 +184,9 @@ func isSwap(tx *types.Transaction) bool {
 
 // isProfitable 判断交易是否存在套利账户
 func isProfitable(tx *types.Transaction) bool {
-	if EthClient == nil {
-		return false
-	}
-
 	receipt, err := EthClient.TransactionReceipt(context.Background(), tx.Hash())
 	if err != nil {
+		fmt.Println(err)
 		return false
 	}
 
@@ -219,8 +208,7 @@ func isProfitable(tx *types.Transaction) bool {
 		to := common.HexToAddress(log.Topics[2].Hex())
 
 		// 解析金额
-		amount := new(big.Int)
-		amount.SetString(strings.TrimPrefix(string(log.Data), "0x"), 16)
+		amount := new(big.Int).SetBytes(log.Data)
 
 		// 初始化映射
 		if _, exists := accountTokenChanges[from]; !exists {
@@ -250,6 +238,7 @@ func isProfitable(tx *types.Transaction) bool {
 				hasDecrease := false
 				for _, t := range receipt.Logs {
 					if t.Address == token && len(t.Topics) >= 2 &&
+						t.Topics[0] != transferSigHash &&
 						common.HexToAddress(t.Topics[1].Hex()) == account {
 						hasDecrease = true
 						break
@@ -318,6 +307,7 @@ func FindArbi(start, end int64, count int) {
 		if err != nil {
 			return fmt.Errorf("获取区块 %d 失败: %w", n, err)
 		}
+		fmt.Println("curr block number:", block.Number().String())
 
 		// 获取区块构建者
 		builder := getBuilder(block)
@@ -325,23 +315,31 @@ func FindArbi(start, end int64, count int) {
 			return nil // 不是已知构建者创建的区块，跳过
 		}
 
+		fmt.Println("builder:", builder)
+
 		// 提取隐私流交易
 		privateTxs := extractPrivateTx(block)
 		if len(privateTxs) == 0 {
 			return nil
 		}
 
+		fmt.Println("privateTxs:", len(privateTxs))
+
 		// 检查每笔隐私流交易是否为原子套利交易
 		signer := types.LatestSignerForChainID(big.NewInt(BSCChainID))
 		for _, tx := range privateTxs {
+			//fmt.Println("handling tx:", tx.Hash().Hex())
 			// 检查是否满足原子套利交易的三个条件
 			if !isSwap(tx) {
+				fmt.Println("no isSwap skip tx:", tx.Hash().Hex())
 				continue
 			}
 			if !isProfitable(tx) {
+				fmt.Println("no isProfitable skip tx:", tx.Hash().Hex())
 				continue
 			}
 			if isOpenSource(tx) {
+				fmt.Println("no isOpenSource skip tx:", tx.Hash().Hex())
 				continue
 			}
 
@@ -368,6 +366,8 @@ func FindArbi(start, end int64, count int) {
 			}
 
 			// 保存到数据库
+			//fmt.Println("find one", arbitrageTx.TxHash)
+			//curr++
 			if err := DB.Table(Table_ArbitraryTransaction).Create(arbitrageTx).Error; err != nil {
 				fmt.Printf("保存套利交易 %s 失败: %v\n", tx.Hash().Hex(), err)
 			} else {
