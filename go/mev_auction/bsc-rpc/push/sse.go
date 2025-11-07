@@ -70,26 +70,6 @@ func (p *SSEServer) Send(data *define.SseBundleData) {
 }
 
 func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// 启动时间检查
-	//enforceTokenStartTime := time.Date(2024, 12, 11, 0, 0, 0, 0, time.UTC)
-	//authToken := p.extractToken(r.Header.Get("Authorization"))
-	//if authToken == "" {
-	//	authToken = r.URL.Query().Get("token")
-	//}
-
-	//if time.Now().After(enforceTokenStartTime) {
-	//	if authToken == "" {
-	//		http.Error(w, "Auth token is missing", http.StatusUnauthorized)
-	//		return
-	//	}
-	//
-	//	if !p.validateToken(authToken) {
-	//		http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
-	//		return
-	//	}
-	//	zap_logger.Zap.Info("authToken is valid", zap.String("token", authToken))
-	//}
-
 	var host string
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
@@ -192,17 +172,6 @@ func (p *SSEServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-
-			//if time.Now().After(enforceTokenStartTime) {
-			//	if authToken == "" {
-			//		http.Error(w, "Auth token is missing", http.StatusUnauthorized)
-			//		return
-			//	}
-			//	if !p.validateToken(authToken) {
-			//		http.Error(w, "Auth token is invalid.Please consider upgrading subscription tier for full access.", http.StatusUnauthorized)
-			//		return
-			//	}
-			//}
 		case <-flushTicker.C:
 			if processed > 0 {
 				flusher.Flush()
@@ -239,26 +208,6 @@ func (p *SSEServer) Unsubscribe(id string) {
 		delete(p.consumers, id)
 	}
 }
-
-//func (p *SSEServer) validateToken(token string) bool {
-//	if len(token) == 0 {
-//		return false
-//	}
-//
-//	if token == "adminToken" {
-//		return true
-//	}
-//
-//	info := portal.UserServer.GetUserInfo(token)
-//	if info == nil {
-//		return false
-//	}
-//
-//	if info.PlanId == 3 || info.PlanId == 2 {
-//		return true
-//	}
-//	return false
-//}
 
 func (p *SSEServer) extractToken(authHeader string) string {
 	if strings.HasPrefix(authHeader, "Bearer ") {

@@ -14,13 +14,7 @@ import (
 )
 
 var (
-	RpcIdList []string // 需要观察的rpcId列表
-
-	BidContractAddress      = common.Address{} // rpc system address to receive refund
-	ProxyContractAddress    = common.Address{}
-	RpcBribePercent         = 10  // bribe percentage the rpc system can obtain
-	RpcBuilderProfitPercent = 100 //profit percentage builder can obtain after bundle accepted
-
+	RpcBribePercent = 10 // bribe percentage the rpc system can obtain
 	// direct transfer transaction setting
 	RpcGasPrice = new(big.Int).Mul(big.NewInt(1), big.NewInt(params.GWei))
 	RpcGasLimit = big.NewInt(21_000)

@@ -32,7 +32,7 @@ func main() {
 	}
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	pushServer := &push.SSEServer{IPLimitCount: 100} // 相当于没限制
-	pool := bundlepool.New(pushServer, nil)
+	pool := bundlepool.New(pushServer)
 	api := mev_api.NewAPI(pool)
 	jsonRPCServer, err := jsonrpcserver.NewHandler(jsonrpcserver.Methods{
 		SendMevBundleEndpointName:      api.SendMevBundle,

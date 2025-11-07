@@ -17,17 +17,6 @@ import (
 
 var CurrentHeader *types.Header
 
-const (
-	// MaxTxPerBundle is the max transactions in each bundle
-	MaxTxPerBundle = 50
-	// MaxBundleCounter is the max depth for bundle
-	MaxBundleCounter = 2
-	// MaxBundleAliveBlock is the max alive block for bundle
-	MaxBundleAliveBlock = 100
-	// MaxBundleAliveTime is the max alive time for bundle
-	MaxBundleAliveTime = 5 * 60 // second
-)
-
 // SendBundleArgs represents the arguments for a call.
 type SendBundleArgs struct {
 	Txs               []hexutil.Bytes `json:"txs"`
@@ -65,13 +54,6 @@ const (
 	HintGasLimit         = "gasLimit"
 	HintGasPrice         = "gasPrice"
 	HintLogs             = "logs"
-)
-
-const (
-	BundleOK = iota
-	BundleNonceTooHigh
-	BundleFeeCapTooLow
-	BundleErr
 )
 
 type Bundle struct {
@@ -207,128 +189,6 @@ func (bundle *Bundle) GenBuilderReq(header *types.Header) (*define.Param, *txv2.
 	if p.MaxBlockNumber > header.Number.Uint64()+100 {
 		p.MaxBlockNumber = header.Number.Uint64() + 100
 	}
-	//var bsr = &txv2.BundleSaveRequest{
-	//	ChainId:    "56",
-	//	RpcId:      bundle.RPCID,
-	//	BundleHash: bundle.Hash().Hex(),
-	//	ParentHash: bundle.ParentHash.Hex(),
-	//}
-	//if bundle.Counter == 0 {
-	//	t := &txv2.TxsData{
-	//		TxHash:         bundle.Txs[0].Hash().Hex(),
-	//		Type:           0,
-	//		ArrivalTime:    bundle.ArrivalTime.Format(time.RFC3339Nano),
-	//		BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//	}
-	//	bsr.TxsData = append(bsr.TxsData, t)
-	//} else if bundle.Counter == 1 && bundle.Parent != nil {
-	//	t := &txv2.TxsData{
-	//		TxHash:         bundle.Parent.Txs[0].Hash().Hex(),
-	//		Type:           0,
-	//		ArrivalTime:    bundle.Parent.ArrivalTime.Format(time.RFC3339Nano),
-	//		BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//	}
-	//	bsr.TxsData = append(bsr.TxsData, t)
-	//
-	//	builderPercent := RpcBuilderProfitPercent
-	//	for _, bgTx := range bundle.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         bgTx.Hash().Hex(),
-	//			Type:           1,
-	//			ArrivalTime:    bundle.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//			RefundData: &txv2.RefundData{
-	//				RefundAddress: bundle.Parent.RefundAddress.Hex(),
-	//				RefundPercent: uint32(bundle.Parent.RefundPercent),
-	//				BribePercent:  uint32(builderPercent),
-	//				ScutumPercent: uint32(RpcBribePercent),
-	//			},
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//} else if bundle.Counter == 2 && bundle.Parent != nil && bundle.Parent.Parent != nil {
-	//	t := &txv2.TxsData{
-	//		TxHash:         bundle.Parent.Parent.Txs[0].Hash().Hex(),
-	//		Type:           0,
-	//		ArrivalTime:    bundle.Parent.Parent.ArrivalTime.Format(time.RFC3339Nano),
-	//		BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//	}
-	//	bsr.TxsData = append(bsr.TxsData, t)
-	//
-	//	builderPercent := RpcBuilderProfitPercent
-	//
-	//	for _, bgTx := range bundle.Parent.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         bgTx.Hash().Hex(),
-	//			Type:           1,
-	//			ArrivalTime:    bundle.Parent.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//			RefundData: &txv2.RefundData{
-	//				RefundAddress: bundle.Parent.Parent.RefundAddress.Hex(),
-	//				RefundPercent: uint32(bundle.Parent.Parent.RefundPercent),
-	//				BribePercent:  uint32(builderPercent),
-	//				ScutumPercent: uint32(RpcBribePercent),
-	//			},
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//
-	//	for _, bgTx := range bundle.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         bgTx.Hash().Hex(),
-	//			Type:           2,
-	//			ArrivalTime:    bundle.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//			RefundData: &txv2.RefundData{
-	//				RefundAddress: bundle.Parent.RefundAddress.Hex(),
-	//				RefundPercent: uint32(bundle.Parent.RefundPercent),
-	//				BribePercent:  uint32(builderPercent),
-	//				ScutumPercent: uint32(RpcBribePercent),
-	//			},
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//} else if bundle.Counter == 1 && bundle.Parent == nil {
-	//	for _, rawTx := range bundle.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         rawTx.Hash().Hex(),
-	//			Type:           0,
-	//			ArrivalTime:    bundle.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//} else if bundle.Counter == 2 && bundle.Parent != nil && bundle.Parent.Parent == nil {
-	//	for _, rawTx := range bundle.Parent.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         rawTx.Hash().Hex(),
-	//			Type:           0,
-	//			ArrivalTime:    bundle.Parent.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//
-	//	builderPercent := RpcBuilderProfitPercent
-	//
-	//	for _, bgTx := range bundle.Txs {
-	//		t := &txv2.TxsData{
-	//			TxHash:         bgTx.Hash().Hex(),
-	//			Type:           1,
-	//			ArrivalTime:    bundle.ArrivalTime.Format(time.RFC3339Nano),
-	//			BundleSendTime: time.Now().Format(time.RFC3339Nano),
-	//			RefundData: &txv2.RefundData{
-	//				RefundAddress: bundle.Parent.RefundAddress.Hex(),
-	//				RefundPercent: uint32(bundle.Parent.RefundPercent),
-	//				BribePercent:  uint32(builderPercent),
-	//				ScutumPercent: uint32(RpcBribePercent),
-	//			},
-	//		}
-	//		bsr.TxsData = append(bsr.TxsData, t)
-	//	}
-	//} else {
-	//	bsr = nil
-	//}
 	return p, nil
 }
 

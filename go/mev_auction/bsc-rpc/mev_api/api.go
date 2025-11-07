@@ -92,23 +92,7 @@ func (a *API) SendRawTransaction(ctx context.Context, input SendRawTransactionAr
 
 // SubmitTransaction is a helper function that submits tx to txPool and logs a message.
 func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBlockNumber uint64, userId int) (SendRawTransactionResponse, error) {
-	//remoteAddr := ctx.Value("remote").(string)
-	//split := strings.Split(remoteAddr, ":")
-	//if len(split) == 2 {
-	//	limiter := limitip.GetLimiter(split[0])
-	//	if !limiter.Allow() {
-	//		return EmptyRawResponse, newBundleError(errors.New("too many requests"))
-	//	}
-	//}
 
-	//if relay.SubServer.IsPublic(tx.Hash()) {
-	//	TransactionFilterPublicGauge.Inc(1)
-	//	return SendRawTransactionResponse{
-	//		TxHash: tx.Hash(),
-	//	}, nil
-	//}
-	// If the transaction fee cap is already specified, ensure the
-	// fee of the given transaction is _reasonable_.
 	if err := checkTxFee(tx.GasPrice(), tx.Gas(), 0); err != nil {
 		return EmptyRawResponse, err
 	}
@@ -136,46 +120,6 @@ func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBl
 		ArrivalTime:       time.Now(),
 	}
 
-	//path := ctx.Value("URL").(string)
-	//host := ctx.Value("Host").(string)
-	//hostSlice := strings.Split(host, ".")
-	//if len(hostSlice) > 4 || len(hostSlice) < 3 {
-	//	return EmptyRawResponse, errors.New("invalid host")
-	//}
-	//var userInfo *portalRpc.GetAllRpcInfoResponse
-	//if len(hostSlice) > 3 {
-	//	userInfo = portal.UserServer.GetAllRpcInfoList(hostSlice[0])
-	//}
-	//if userInfo == nil {
-	//	if path == "/fullprivacy" {
-	//		bundle.RPCID = "fullprivacy"
-	//	} else if path == "/maxbackrun" {
-	//		bundle.Hint[types.HintHash] = true
-	//		bundle.Hint[types.HintTo] = true
-	//		bundle.Hint[types.HintCallData] = true
-	//		bundle.Hint[types.HintFunctionSelector] = true
-	//		bundle.Hint[types.HintLogs] = true
-	//		bundle.RPCID = "maxbackrun"
-	//	} else if len(path) > 15 {
-	//		split := strings.Split(path, "/")
-	//		userInfo = portal.UserServer.GetAllRpcInfoList(split[len(split)-1])
-	//		if userInfo == nil {
-	//			bundle.Hint[types.HintHash] = true
-	//			bundle.Hint[types.HintLogs] = true
-	//			bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-	//			bundle.RPCID = "default"
-	//		}
-	//	} else {
-	//		bundle.Hint[types.HintHash] = true
-	//		bundle.Hint[types.HintLogs] = true
-	//		bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-	//		bundle.RPCID = "default"
-	//	}
-	//}
-	//if userInfo == nil {
-	//	userInfo = portal.UserServer.GetAllRpcInfoList(bundle.RPCID)
-	//}
-
 	bundle.Hint[types.HintHash] = true
 	bundle.Hint[types.HintTo] = true
 	bundle.Hint[types.HintFrom] = true
@@ -186,34 +130,6 @@ func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBl
 	bundle.Hint[types.HintGasLimit] = true
 	bundle.Hint[types.HintGasPrice] = true
 	bundle.RPCID = "maxbackrun"
-
-	//if userInfo != nil {
-	//	bundle.RPCID = userInfo.RpcId
-	//	bundle.Hint[types.HintHash] = userInfo.HintHash
-	//	bundle.Hint[types.HintFrom] = userInfo.HintFrom
-	//	bundle.Hint[types.HintTo] = userInfo.HintTo
-	//	bundle.Hint[types.HintValue] = userInfo.HintValue
-	//	bundle.Hint[types.HintNonce] = userInfo.HintNonce
-	//	bundle.Hint[types.HintCallData] = userInfo.HintCalldata
-	//	bundle.Hint[types.HintFunctionSelector] = userInfo.HintFunctionSelector
-	//	bundle.Hint[types.HintGasLimit] = userInfo.HintGasLimit
-	//	bundle.Hint[types.HintGasPrice] = userInfo.HintGasPrice
-	//	bundle.Hint[types.HintLogs] = userInfo.HintLogs
-	//	bundle.PrivacyPeriod = userInfo.PrivacyPeriod
-	//	bundle.PrivacyBuilder = userInfo.PrivacyBuilder
-	//	bundle.BroadcastBuilder = userInfo.BroadcastBuilder
-	//
-	//	if userInfo.RefundPercent >= 1 && userInfo.RefundPercent <= 99 {
-	//		bundle.RefundPercent = int(userInfo.RefundPercent)
-	//	}
-	//	if userInfo.RefundRecipient != "" && userInfo.RefundRecipient != "tx.origin" {
-	//		bundle.RefundAddress = common.HexToAddress(userInfo.RefundRecipient)
-	//	}
-	//
-	//	if !userInfo.IsProtected {
-	//		bundle.RevertingTxHashes = []common.Hash{tx.Hash()}
-	//	}
-	//}
 
 	if ctx.Value("RefundPercent") != nil {
 		p := cast.ToInt(ctx.Value("RefundPercent"))
@@ -232,8 +148,6 @@ func SubmitTransaction(ctx context.Context, a *API, tx *types.Transaction, maxBl
 	if tip.Uint64() < params.GWei {
 		return EmptyRawResponse, errors.New("the gas tip fee of transaction must be greater than or equal to 1gwei")
 	}
-
-	//invalid_tx.Server.Delete(tx.Hash())
 
 	if err := a.pool.AddBundle(bundle); err != nil {
 		return EmptyRawResponse, err

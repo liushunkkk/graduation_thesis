@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-const InvalidBundleParamError = -38000
-
 func newBundleError(err error) *bundleError {
 	return &bundleError{
 		error: err,
@@ -34,16 +32,7 @@ var EmptyBundleResponse = SendMevBundleResponse{
 
 // SendMevBundle rpc core interface
 func (a *API) SendMevBundle(ctx context.Context, args types.SendMevBundleArgs) (SendMevBundleResponse, error) {
-	//remoteAddr := ctx.Value("remote").(string)
-	//split := strings.Split(remoteAddr, ":")
-	//if len(split) == 2 {
-	//	limiter := limitip.GetLimiter(split[0])
-	//	if !limiter.Allow() {
-	//		return common.Hash{}, newBundleError(errors.New("too many requests"))
-	//	}
-	//}
 
-	//fmt.Println(time.Now(), " SendMevBundle:", args)
 	if len(args.Txs) == 0 {
 		return EmptyBundleResponse, newBundleError(errors.New("bundle missing txs"))
 	}
@@ -55,19 +44,6 @@ func (a *API) SendMevBundle(ctx context.Context, args types.SendMevBundleArgs) (
 	if (args.Hash == common.Hash{}) && len(args.Txs) > types.MaxTxPerBundle {
 		return EmptyBundleResponse, newBundleError(errors.New(fmt.Sprintf("the number of bundle txs should not be lager than %d", types.MaxTxPerBundle)))
 	}
-	//currentHeader := CurrentHeader()
-	//
-	//if args.MaxBlockNumber != 0 && args.MaxBlockNumber > currentHeader.Number.Uint64()+types.MaxBundleAliveBlock {
-	//	return common.Hash{}, newBundleError(errors.New("the maxBlockNumber should not be lager than currentBlockNum + 100"))
-	//}
-	//if args.MaxBlockNumber != 0 && args.MaxBlockNumber <= currentHeader.Number.Uint64() {
-	//	return common.Hash{}, newBundleError(errors.New("the maxBlockNumber should be lager than currentBlockNum"))
-	//}
-	//
-	//// If the maxBlockNumber is not set, set max ddl of bundle as types.MaxBundleAliveBlock
-	//if args.MaxBlockNumber == 0 {
-	//	args.MaxBlockNumber = currentHeader.Number.Uint64() + types.MaxBundleAliveBlock
-	//}
 
 	var txs types.Transactions
 	for _, encodedTx := range args.Txs {
@@ -107,32 +83,6 @@ func (a *API) SendMevBundle(ctx context.Context, args types.SendMevBundleArgs) (
 		BroadcastBuilder: []string{"blockrazor", "48club", "bloxroute", "smith"},
 		ArrivalTime:      time.Now(),
 	}
-
-	//path := ctx.Value("URL").(string)
-	//host := ctx.Value("Host").(string)
-	//hostSlice := strings.Split(host, ".")
-	//if len(hostSlice) > 4 || len(hostSlice) < 3 {
-	//	return common.Hash{}, errors.New("invalid host")
-	//}
-	//var userInfo *portalRpc.GetAllRpcInfoResponse
-	//if len(hostSlice) > 3 {
-	//	userInfo = portal.UserServer.GetAllRpcInfoList(hostSlice[0])
-	//}
-	//if userInfo == nil && len(path) > 15 {
-	//	split := strings.Split(path, "/")
-	//	userInfo = portal.UserServer.GetAllRpcInfoList(split[len(split)-1])
-	//}
-	//if userInfo == nil {
-	//	bundle.RPCID = "default"
-	//	userInfo = portal.UserServer.GetAllRpcInfoList(bundle.RPCID)
-	//}
-	//if userInfo != nil {
-	//	bundle.RPCID = userInfo.RpcId
-	//	bundle.PrivacyPeriod = userInfo.PrivacyPeriod
-	//	bundle.PrivacyBuilder = userInfo.PrivacyBuilder
-	//	bundle.BroadcastBuilder = userInfo.BroadcastBuilder
-	//}
-	////////////////////
 
 	for hint, _ := range args.Hint {
 		if hint != types.HintHash &&

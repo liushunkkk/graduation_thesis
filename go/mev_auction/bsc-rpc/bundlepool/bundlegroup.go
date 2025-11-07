@@ -40,24 +40,10 @@ var functionSelectors = map[string]bool{
 }
 
 func (bg *BundleGroup) SendSseData(sseData *define.SseBundleData, bundle *base.Bundle, header *types.Header) {
-	//if len(sseData.SseTxs) == 1 {
-	//	if len(sseData.SseTxs[0].Logs) == 0 {
-	//		ethapi.TransactionFilterPureGauge.Inc(1)
-	//		return
-	//	}
-	//	if _, ok := functionSelectors[sseData.SseTxs[0].Selector]; ok {
-	//		ethapi.TransactionFilterPureGauge.Inc(1)
-	//		return
-	//	}
-	//}
-
 	// 需要是非公开交易
 	if bundle.Counter == 1 || bundle.Counter == 0 {
 		bg.sseServer.Send(sseData)
 	}
-	//else {
-	//	ethapi.TransactionFilterPublicGauge.Inc(1)
-	//}
 }
 
 // Len get len
@@ -137,7 +123,6 @@ func (bg *BundleGroup) Reset(header *types.Header) (closed bool, delHash []commo
 
 	bg.rwMtx.RLock()
 	if bg.Closed ||
-		//bg.blockchain.GetBlockByHash(header.Hash()).Transaction(bg.Original.Txs[0].Hash()) != nil ||
 		bg.Original.MaxBlockNumber <= header.Number.Uint64() {
 		bg.rwMtx.RUnlock()
 		bg.Closed = true
@@ -275,12 +260,6 @@ func (bg *BundleGroup) GetMaxBundle(header *types.Header) (bundle *base.Bundle) 
 			}
 		}
 	}
-	//if bg.lastMaxBundle != nil && bg.lastMaxBundle == maxBundle {
-	//	return nil
-	//} else {
-	//	bg.lastMaxBundle = maxBundle
-	//}
-
 	return maxBundle
 }
 
@@ -303,7 +282,6 @@ func (bg *BundleGroup) Send(ctx context.Context, msg interface{}, num int) (resp
 		timeOut  time.Duration
 		waitTime time.Duration
 	}{
-		//{1000 * time.Millisecond, 1000 * time.Millisecond},
 		{2000 * time.Millisecond, 2600 * time.Millisecond}, // global 3 endpoint
 		{2600 * time.Millisecond, 2800 * time.Millisecond}, // for us
 		{2800 * time.Millisecond, 2880 * time.Millisecond}, // for us
@@ -353,9 +331,6 @@ func (bg *BundleGroup) send(header *types.Header, timeOut time.Duration, waitTim
 				bg.builderServer.Send(header, bg.Original, bg.CreatedNumber)
 			}
 		}
-		//if longBlock {
-		//	time.Sleep(2998*time.Millisecond - waitTime)
-		//}
 	}
 	return try
 }

@@ -12,14 +12,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/ms"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"go.uber.org/zap"
 	"strings"
-	"time"
 )
-
-var PublicNodes []string
 
 var Builders = map[string]Builder{
 	"blockrazor": blockrazor.NewBlockRazor(),
@@ -46,13 +41,7 @@ func NewBuilderServer() *BuilderServer {
 		name := n
 		s, _ := ms.NewSvr(name, func(ctx context.Context, msg interface{}, num int) (interface{}, error) {
 			builderParam := msg.(*define.BuilderParam)
-
-			//if (name == "blockrazor" && builderParam.Counter == 0) || (name == "48club" && builderParam.Counter == 0) {
-			//	go builer.SendRawPrivateTransaction(builderParam.Param.Txs[0], builderParam.BundleHash)
-			//}
-			//if (name != "blockrazor") || (name == "blockrazor" && builderParam.Counter != 0) {
 			go builer.SendBundle(*builderParam.Param, builderParam.BundleHash)
-			//}
 			return nil, nil
 		}, nil)
 		s.ActionGoroutineNum = 5
@@ -78,23 +67,12 @@ func (bs *BuilderServer) Stop() {
 func (bs *BuilderServer) Send(header *types.Header, bundle *base.Bundle, createNumber uint64) {
 	builderParam, _ := bundle.GenBuilderReq(header)
 
-	//validatorNextIs48 := validator.Server.NextBlockIs48Club(header.Number.Int64())
-	//validatorAfterNextIs48 := validator.Server.NextBlockIs48Club(header.Number.Int64() + 1) // the block after next is club48.
-
 	var builderList []string
 	if header.Number.Uint64()-createNumber < uint64(bundle.PrivacyPeriod) {
-		// PrivacyBuilder
 		builderList = bundle.PrivacyBuilder
 	} else {
-		// BroadcastBuilder
 		builderList = bundle.BroadcastBuilder
 	}
-
-	//if header.Number.Uint64()-createNumber >= uint64(bundle.PrivacyPeriod) && bundle.Erc20Tx {
-	//	for _, addr := range PublicNodes {
-	//		go sendToPublicNode(bundle, addr)
-	//	}
-	//}
 
 	for _, builder := range builderList {
 		builder = strings.ToLower(builder)
@@ -112,25 +90,5 @@ func (bs *BuilderServer) Send(header *types.Header, bundle *base.Bundle, createN
 				Counter:    bundle.Counter,
 			})
 		}
-	}
-
-	// send portal data to portal
-	//if portalBundleData != nil {
-	//	//fmt.Println("called portal.BundleSaver.Send")
-	//	portal.BundleSaver.Send(portalBundleData)
-	//}
-}
-
-func sendToPublicNode(bundle *base.Bundle, addr string) {
-	dial, err := ethclient.Dial(addr)
-	if err != nil {
-		return
-	}
-	ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-	err = dial.SendTransaction(ctx, bundle.Txs[0])
-	if err != nil {
-		log.Error("failed to send raw tx: ", zap.Any("err", err.Error()), zap.Any("addr", addr))
-	} else {
-		log.Info("send raw tx to public node, tx hash is ", zap.Any("bundleHash", bundle.Hash()), zap.Any("addr", addr))
 	}
 }
