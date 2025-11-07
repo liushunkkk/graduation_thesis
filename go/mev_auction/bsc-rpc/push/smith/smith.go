@@ -62,7 +62,7 @@ func (smith *Smith) SendBundle(param define.Param, hash common.Hash) {
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Basic ZjMyM2EzMWQtMmMwNy0zMGNhLTg0ZjEtN2I3MGI1OWRkY2VkOjNkYzBmYWE4NDJmOWE0ZmM5MzViYTRhZjU4Y2U3ODcz")
+	httpReq.Header.Set("Authorization", "xxx")
 
 	resp, err := client.Do(httpReq)
 	if err != nil {

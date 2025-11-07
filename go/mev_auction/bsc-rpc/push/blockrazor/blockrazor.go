@@ -68,7 +68,7 @@ func (blockRazor *BlockRazor) SendBundle(param define.Param, hash common.Hash) {
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "YWCVWDpexIVHRIDshlrH8Ohfv8gVCOEmHBbvH38DEkD3TIWWVGEiIUBYJUTnuqYb5ECf1NwssJoIB6UG4jnPmJCFMTFJC4G8")
+	httpReq.Header.Set("Authorization", "xxxx")
 
 	resp, err := client.Do(httpReq)
 	if err != nil {

@@ -28,7 +28,7 @@ type BuilderData struct {
 }
 
 func NewNodeReal() *NodeReal {
-	return &NodeReal{HttpAddress: "https://bsc-mainnet.nodereal.io/v1/fe2c9a1d2bfe434e9549b37495548264", PublicAddress: ""}
+	return &NodeReal{HttpAddress: "https://bsc-mainnet.nodereal.io/v1/xxxx", PublicAddress: ""}
 }
 
 func (nodereal *NodeReal) GetPublicAddress() common.Address {

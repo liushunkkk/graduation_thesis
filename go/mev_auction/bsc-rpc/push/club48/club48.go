@@ -31,7 +31,7 @@ var decrypted string
 var cache *lru.Cache[string, struct{}]
 
 func init() {
-	encrypt := "RPyoF0X0aAykgTHHc9MfHJkyosQzOlbCGci0wEI0FMIWVjOkT0Xk8lg9jLlXvdZ0UirJz4hgHpYcqLfhRK/sOMFzraKHcJgE/BcRoz9pNDw+y/z5N+GfjQz0ranOvw+k"
+	encrypt := "xxxx"
 	var err error
 	decrypted, err = decryptAES(encrypt, []byte(key1+key2))
 	if err != nil {
