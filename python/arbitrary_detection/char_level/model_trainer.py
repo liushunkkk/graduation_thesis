@@ -333,11 +333,11 @@ if __name__ == "__main__":
     DEVICE = 0
     # seq_mode: attn lstm cnn mean attn_pos
     # char_mode: lstm cnn mean
-    # model = train_model(use_features=["num", "data", "logs"], seq_mode='attn_pos', char_mode="lstm", epochs=20)
+    model = train_model(use_features=["num", "data", "logs"], seq_mode='attn_pos', char_mode="lstm", epochs=20)
 
     # only test
-    y_pred = only_test(2, "../all_data/datasets/test.csv", ["num", "data", "logs"])
-    # 需要保存则取消注释
-    res = pd.read_csv("../baseline/result.csv")
-    res["our_result"] = y_pred
-    res.to_csv("../baseline/result.csv", index=False)
+    # y_pred = only_test(2, "../all_data/datasets/test.csv", ["num", "data", "logs"])
+    # # 需要保存则取消注释
+    # res = pd.read_csv("../baseline/result.csv")
+    # res["our_result"] = y_pred
+    # res.to_csv("../baseline/result.csv", index=False)
