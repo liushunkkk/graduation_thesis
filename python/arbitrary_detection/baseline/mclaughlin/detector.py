@@ -38,6 +38,24 @@ class TransferArbitrageDetector:
         推断可能的兑换地址，并生成 token -> token 边
         """
         # 统计每个地址各 token 流入 / 流出
+        # exchanges = []
+        # i = 0
+        # for token, frm, to, value in transfers:
+        #     i += 1
+        #     j = 0
+        #     for token1, frm1, to1, value1 in transfers:
+        #         j += 1
+        #         if i >= j:
+        #             continue
+        #         if to == frm1:
+        #             exchanges.append({
+        #                 "executor": to,
+        #                 "in_token": token,
+        #                 "out_token": token1,
+        #                 "in_amount": value,
+        #                 "out_amount": -value1
+        #             })
+
         addr_token_flow = defaultdict(lambda: defaultdict(int))
         addresses = set()
         for token, frm, to, value in transfers:

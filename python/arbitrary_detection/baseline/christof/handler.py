@@ -25,7 +25,9 @@ class ChristofHandler:
             with open("pool_cache.pkl", "rb") as f:
                 self.detector.pool_cache = pickle.load(f)
 
+        count=1
         for idx, row in df_data.iterrows():
+            count+=1
             tx_hash = row.get("tx_hash")
             logs_json = row.get("logs")
             label = row.get("label")
@@ -48,6 +50,9 @@ class ChristofHandler:
                     "label": label,
                     "error": str(e)
                 })
+            if count % 10000 == 0:
+                with open("pool_cache.pkl", "wb") as f:
+                    pickle.dump(self.detector.pool_cache, f)
         with open("pool_cache.pkl", "wb") as f:
             pickle.dump(self.detector.pool_cache, f)
 

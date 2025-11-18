@@ -9,7 +9,7 @@ from baseline.arbinet.trainer import ArbiNetTrainer
 
 if __name__ == '__main__':
     TARGET = "all_data"
-    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Using device:', device)
 
     # ================= 1. 构建训练图 =================

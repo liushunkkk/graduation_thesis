@@ -324,15 +324,20 @@ def only_test(model_epoch, test_path, use_features):
     th_t, tp_t, fp_t, tn_t, fn_t, acc_t, prec_t, recall_t, f1_t = test_results[4]
     print(f"  Test : TP={tp_t}, TN={tn_t}, FP={fp_t}, FN={fn_t}, "
           f"Acc={acc_t:.3f}, Prec={prec_t:.3f}, Recall={recall_t:.3f}, F1={f1_t:.3f}")
+    return [1 if p >= 0.5 else 0 for p in y_pred_prob_test]
 
 
 if __name__ == "__main__":
     global TARGET, DEVICE
     TARGET = "all_data"  # half_data or all_data
-    DEVICE = 4
+    DEVICE = 0
     # seq_mode: attn lstm cnn mean attn_pos
     # char_mode: lstm cnn mean
-    model = train_model(use_features=["num", "data", "logs"], seq_mode='attn_pos', char_mode="lstm", epochs=20)
+    # model = train_model(use_features=["num", "data", "logs"], seq_mode='attn_pos', char_mode="lstm", epochs=20)
 
     # only test
-    # only_test(11, "../eth_dataset/datasets/test.csv", ["num", "data", "logs"])
+    y_pred = only_test(2, "../all_data/datasets/test.csv", ["num", "data", "logs"])
+    # 需要保存则取消注释
+    res = pd.read_csv("../baseline/result.csv")
+    res["our_result"] = y_pred
+    res.to_csv("../baseline/result.csv", index=False)

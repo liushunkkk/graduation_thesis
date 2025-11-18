@@ -8,6 +8,7 @@ if __name__ == '__main__':
     handler = MclaughlinHandler(detector)
 
     # 分析正负样本
+    print("loading data...")
     df_results = handler.analyze_files("../../all_data/datasets/test.csv")
 
     # 计算指标
