@@ -85,4 +85,6 @@ Christof/Ferreira:
 TP=17541, FP=9364, TN=387192, FN=2480 Acc=0.972 Prec=0.652 Recall=0.876, F1=0.748
 ArbiNet:
 TP=19399, TN=385448, FP=11108, FN=622 Acc=0.972, Prec=0.636, Recall=0.969, F1=0.768
+My Approach:
+TP=19748, TN=393119, FP=3437, FN=273, Acc=0.991, Prec=0.852, Recall=0.986, F1=0.914 done
 ```
