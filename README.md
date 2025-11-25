@@ -2,9 +2,9 @@
 
 ### 文件目录
 
-套利交易识别方法的相关文件在：[go/arbitrage_detection](https://github.com/liushunkkk/graduation_thesis/tree/master/go/arbitrage_detection)和[python/arbitrary_detection](https://github.com/liushunkkk/graduation_thesis/tree/master/python/arbitrary_detection)下
+套利交易识别方法的相关文件在：[go/arbitrage_detection](https://github.com/liushunkkk/graduation_thesis/tree/master/go/arbitrage_detection)和[python/arbitrary_detection](https://github.com/liushunkkk/graduation_thesis/tree/master/python/arbitrary_detection)包下
 
-MEV拍卖平台在[go/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/go/mev_auction)和[python/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/python/mev_auction)下
+MEV拍卖平台的相关文件在[go/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/go/mev_auction)和[python/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/python/mev_auction)包下
 
 
 
