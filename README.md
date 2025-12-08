@@ -6,6 +6,8 @@
 
 MEV拍卖平台的相关文件在[go/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/go/mev_auction)和[python/mev_auction](https://github.com/liushunkkk/graduation_thesis/tree/master/python/mev_auction)包下
 
+数据集上传至[zenodo](https://zenodo.org/records/17513600).
+
 
 
 ### 实验环境
