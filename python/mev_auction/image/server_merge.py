@@ -3,6 +3,9 @@ from collections import defaultdict
 from datetime import datetime
 
 from matplotlib import pyplot as plt
+from pylab import mpl
+# 设置显示中文字体
+mpl. rcParams ["font.sans-serif"] = ["Arial Unicode MS"]
 
 if __name__ == '__main__':
     log_file = "../base_lab_log_files/share-node.log"
@@ -77,7 +80,7 @@ if __name__ == '__main__':
             t0_share = times_share[0]
             times_offset_share = [t - t0_share for t in times_share]
             share_y = [share_counts[t] for t in times_share]
-            plt.plot(times_offset_share, share_y, label="MEV Share Node", marker="o")
+            plt.plot(times_offset_share, share_y, label="Flashbots MEV Share Node", marker="o")
 
         # === bsc-rpc ===
         if bsc_counts:
@@ -87,9 +90,9 @@ if __name__ == '__main__':
             bsc_y = [bsc_counts[t] for t in times_bsc]
             plt.plot(times_offset_bsc, bsc_y, label="MP-RPC Node", marker="o")
 
-        plt.xlabel("Relative Time (s, 3-second bucket offset)")
-        plt.ylabel("Avg txs per 3 seconds")
-        plt.title(f"builder sent count")
+        plt.xlabel("相对时间（3秒区间时间）")
+        plt.ylabel("平均交易数")
+        plt.title(f"构建者转发交易数")
         plt.legend(
             loc="upper left",
             bbox_to_anchor=(1.02, 1),  # 调整位置：x>1表示右移到图外

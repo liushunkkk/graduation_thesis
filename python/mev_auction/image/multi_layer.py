@@ -4,6 +4,10 @@ from datetime import datetime
 
 import numpy as np
 from matplotlib import pyplot as plt
+from pylab import mpl
+# 设置显示中文字体
+mpl. rcParams ["font.sans-serif"] = ["Arial Unicode MS"]
+
 
 if __name__ == '__main__':
     lab = "multi_lab_log_files"
@@ -76,11 +80,11 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(6, 4))
 
-        plt.bar(x - width / 2, [c1.get(k, 0) for k in all_keys], width=width, label="comparison lab")
-        plt.bar(x + width / 2, [c.get(k, 0) for k in all_keys], width=width, label="mutil-layer lab")
-        plt.xlabel("Txs")
-        plt.ylabel("Send count")
-        plt.title(f"Builder txs distribution")
+        plt.bar(x - width / 2, [c1.get(k, 0) for k in all_keys], width=width, label="对比试验")
+        plt.bar(x + width / 2, [c.get(k, 0) for k in all_keys], width=width, label="多层嵌套实验")
+        plt.xlabel("交易层数")
+        plt.ylabel("发送数")
+        plt.title(f"构建者交易分布")
         plt.xticks(x, all_keys)  # 把x轴标记换成txs的值
         plt.legend(
             loc="upper left",

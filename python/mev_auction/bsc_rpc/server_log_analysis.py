@@ -3,6 +3,10 @@ from datetime import datetime
 from collections import defaultdict, Counter
 import numpy as np
 import matplotlib.pyplot as plt
+from pylab import mpl
+# 设置显示中文字体
+mpl. rcParams ["font.sans-serif"] = ["Arial Unicode MS"]
+
 
 lab = "base_lab_log_files"
 
@@ -68,12 +72,12 @@ if __name__ == '__main__':
         bundles = [r["bundles"] for r in pool_records]
         relative_seconds = [(t - times[0]).total_seconds() for t in times]
         plt.figure(figsize=(12, 5))
-        plt.plot(relative_seconds, groups, label="Bundle Group Size")
-        plt.plot(relative_seconds, bundles, label="bundle Size")
-        plt.xlabel("Time(s)")
+        plt.plot(relative_seconds, groups, label="Bundle Group数目")
+        plt.plot(relative_seconds, bundles, label="bundle数目")
+        plt.xlabel("时间（秒）")
         plt.xlim(0, 220)
-        plt.ylabel("Size")
-        plt.title("Bundle Pool State Over Time")
+        plt.ylabel("数目")
+        plt.title("Bundle Pool状态变化")
         plt.legend(
             loc="upper left",
             bbox_to_anchor=(1.02, 1),  # 调整位置：x>1表示右移到图外

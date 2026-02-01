@@ -4,8 +4,12 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from matplotlib import pyplot as plt
+from pylab import mpl
+# 设置显示中文字体
+mpl. rcParams ["font.sans-serif"] = ["Arial Unicode MS"]
 
-lab = "base_lab_log_files"
+
+lab = "error_60s_lab_log_files"
 
 
 def parse_log_line(line):
@@ -159,12 +163,12 @@ def analyze_log(filename):
         # 生成从 0 开始的相对秒数
         relative_seconds = [(t - times_sorted[0]).total_seconds() for t in times_sorted]
         plt.figure(figsize=(12, 5))
-        plt.plot(relative_seconds, avg_costs, label='searcher-01', marker='o')
-        plt.plot(relative_seconds, avg_costs_compare, label='searcher-06', marker='o')
-        plt.xlabel("Time (s)")
-        plt.ylabel("Average Receive Time (ms)")
+        plt.plot(relative_seconds, avg_costs, label='搜索者01', marker='o')
+        plt.plot(relative_seconds, avg_costs_compare, label='搜索者06', marker='o')
+        plt.xlabel("时间（秒）")
+        plt.ylabel("平均接收时间（毫秒）")
         plt.ylim(0, 100)
-        plt.title("[Searcher] Receive User Transaction Stream Wait Over Time")
+        plt.title("搜索者接收用户交易流时延")
         plt.legend()
         plt.tight_layout()
         plt.show()
